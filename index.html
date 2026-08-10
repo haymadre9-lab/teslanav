@@ -52,6 +52,9 @@
   .navsub{font-size:13px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:34vw;margin-top:2px;}
   .navsmall{font-size:11px;color:var(--dim);margin-left:8px;padding-left:10px;border-left:1px solid var(--bd);text-align:right;line-height:1.35;}
   .navx{background:transparent;border:0;color:var(--dim);font-size:16px;cursor:pointer;padding:0 2px;}
+  .navnext2{display:none;top:88px;left:50%;transform:translateX(-50%);align-items:center;gap:8px;background:rgba(16,18,24,.8);border:1px solid var(--bd);border-radius:12px;padding:5px 12px;backdrop-filter:blur(12px);}
+  .navnext2 .arrow2{width:30px;height:32px;flex:0 0 auto;} .navnext2 .arrow2 svg{width:100%;height:100%;display:block;}
+  .nn2txt{font-size:12px;color:var(--dim);}
 </style></head>
 <body>
 <div id="app">
@@ -77,6 +80,7 @@
     <div class="navsmall" id="navsmall"></div>
     <button class="navx" id="navx">✕</button>
   </div>
+  <div class="ovl navnext2" id="navnext2"><div class="arrow2" id="arrow2"></div><div class="nn2txt" id="nn2txt"></div></div>
   <button class="ovl daynight" id="daynight">☀️</button>
   <button class="ovl recenter" id="recenter">🎯</button>
 
@@ -91,11 +95,10 @@ $('hudcar').src=DAY;
 // ---------- mapa (CARTO dark, gratis, sin cuenta) ----------
 const map=new maplibregl.Map({
   container:'map', attributionControl:{compact:true},
-  style:{version:8,sources:{c:{type:'raster',tiles:[
-    'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-    'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-    'https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'],tileSize:256,
-    attribution:'© OpenStreetMap © CARTO'}},layers:[{id:'c',type:'raster',source:'c'}]},
+  style:{version:8,sources:{
+    day:{type:'raster',tiles:['https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png','https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png','https://c.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png'],tileSize:256,attribution:'© OpenStreetMap © CARTO'},
+    night:{type:'raster',tiles:['https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png','https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png','https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png'],tileSize:256,attribution:'© OpenStreetMap © CARTO'}},
+    layers:[{id:'bg',type:'background',paint:{'background-color':'#0a0e17'}},{id:'day',type:'raster',source:'day'},{id:'night',type:'raster',source:'night',layout:{visibility:'none'}}]},
   center:[-2.93,43.26], zoom:15.6, pitch:55, bearing:0, dragRotate:true
 });
 const carEl=document.createElement('div'); carEl.id='car3';
@@ -105,7 +108,7 @@ const carMk=new maplibregl.Marker({element:carEl,rotationAlignment:'map'}).setLn
 let raw=null;              // última lectura GPS {lat,lon,head,spd,t}
 let disp=null;            // posición mostrada (suavizada) {lat,lon,head}
 let follow=true, speedKmh=0, limit=null;
-let pois=[], lastPoiPos=null, lastPoiAt=0;
+let pois=[], lastPoiPos=null, lastPoiAt=0, lastLimPos=null, lastLimAt=0;
 
 function dist(a,b){const R=6371000,dLat=(b[0]-a[0])*Math.PI/180,dLon=(b[1]-a[1])*Math.PI/180,
   la1=a[0]*Math.PI/180,la2=b[0]*Math.PI/180;const x=Math.sin(dLat/2)**2+Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2;
@@ -135,7 +138,8 @@ navigator.geolocation && navigator.geolocation.watchPosition(p=>{
   const acc=Math.round(c.accuracy||0);
   $('status').textContent='GPS '+c.latitude.toFixed(4)+', '+c.longitude.toFixed(4)+' · ±'+acc+' m'+(acc>800?' (impreciso: WiFi/IP, no GPS real)':' ✔');
   const here=[raw.lat,raw.lon];
-  if(!lastPoiPos||dist(lastPoiPos,here)>800||now-lastPoiAt>60000){lastPoiAt=now;lastPoiPos=here;fetchPois(here);fetchLimit(here);}
+  if(!lastPoiPos||dist(lastPoiPos,here)>800||now-lastPoiAt>60000){lastPoiAt=now;lastPoiPos=here;fetchPois(here);}
+  if(!lastLimPos||dist(lastLimPos,here)>60||now-lastLimAt>8000){lastLimAt=now;lastLimPos=here;fetchLimit(here);}
 },e=>{$('status').textContent='GPS: '+e.message;},{enableHighAccuracy:true,maximumAge:1000,timeout:20000});
 
 // ---------- bucle de render (interpolación suave) ----------
@@ -150,7 +154,7 @@ function frame(now){
     disp.lon += (raw.lon-disp.lon)*Math.min(1,dt*1.8);
     disp.head = angLerp(disp.head, raw.head, Math.min(1,dt*3));
     carMk.setLngLat([disp.lon,disp.lat]); carMk.setRotation(disp.head);
-    if(follow){ map.jumpTo({center:[disp.lon,disp.lat], bearing:disp.head}); }
+    if(follow){ const ah=moveLL(disp.lat,disp.lon,disp.head,55); map.jumpTo({center:[ah[1],ah[0]], bearing:disp.head}); }
   }
   $('spd').textContent=Math.round(speedKmh);
   if(limit){ $('limit').style.display='flex'; $('limitn').textContent=limit; $('spd').classList.toggle('over',speedKmh>limit+3); }
@@ -170,7 +174,9 @@ function arrowSVG(mod){return '<svg viewBox="0 0 48 52"><path d="M24 8 L24 44 M2
 function arrowHead(x,y,t,c){const a1=t+2.55,a2=t-2.55,l=6.5;return '<path d="M'+x.toFixed(1)+' '+y.toFixed(1)+' L'+(x+Math.sin(a1)*l).toFixed(1)+' '+(y-Math.cos(a1)*l).toFixed(1)+' M'+x.toFixed(1)+' '+y.toFixed(1)+' L'+(x+Math.sin(a2)*l).toFixed(1)+' '+(y-Math.cos(a2)*l).toFixed(1)+'" stroke="'+c+'" stroke-width="4" stroke-linecap="round"/>';}
 function roundaboutSVG(exit,mod){
   const c='#fff',g='#5b6472',cx=24,cy=26,r=9;
-  const deg=(rot[mod]!=null?rot[mod]:40), t=deg*Math.PI/180;
+  const n=parseInt(exit,10);
+  const deg = n===1?90 : n===2?0 : n===3?-90 : 180;   // 1 dcha · 2 frente · 3 izq · 4+ abajo
+  const t=deg*Math.PI/180;
   const ex=cx+Math.sin(t)*r, ey=cy-Math.cos(t)*r, ox=cx+Math.sin(t)*(r+13), oy=cy-Math.cos(t)*(r+13);
   return '<svg viewBox="0 0 48 52">'
     +'<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="'+g+'" stroke-width="3.6"/>'
@@ -206,9 +212,10 @@ function ensureRouteLayer(){ if(map.getSource('route'))return; try{
   map.addLayer({id:'route',type:'line',source:'route',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#4c8dff','line-width':6}});
 }catch(e){} }
 map.on('load',ensureRouteLayer);
-let mapNight=true;
-function setMapMode(night){ const base=night?'dark_all':'rastertiles/voyager'; const t=['a','b','c'].map(x=>'https://'+x+'.basemaps.cartocdn.com/'+base+'/{z}/{x}/{y}.png'); const src=map.getSource('c'); if(src&&src.setTiles) src.setTiles(t); mapNight=night; $('daynight').textContent=night?'☀️':'🌙'; }
+let mapNight=false;
+function setMapMode(night){ try{ map.setLayoutProperty('day','visibility',night?'none':'visible'); map.setLayoutProperty('night','visibility',night?'visible':'none'); }catch(e){} mapNight=night; $('daynight').textContent=night?'☀️':'🌙'; }
 $('daynight').onclick=()=>setMapMode(!mapNight);
+$('daynight').textContent='🌙';
 let routeCoords=[], routeProgIdx=0;
 function drawRoute(coords){ ensureRouteLayer(); routeCoords=coords; routeProgIdx=0; const src=map.getSource('route'); if(src) src.setData({type:'Feature',geometry:{type:'LineString',coordinates:coords}}); routeGeom=coords.map(c=>[c[1],c[0]]); }
 function trimRoute(){
@@ -232,8 +239,11 @@ async function routeTo(dest){
     renderStep(true);
   }catch(e){ $('status').textContent='Error de ruta'; }
 }
-function renderStep(say){ const s=steps[stepIdx]; if(!s)return; $('arrow').innerHTML=maneuverSVG(s); $('navsub').textContent=s.name||shortHint(s); if(say) speak(s.instr); }
-function endRoute(){ routeOn=false; steps=[]; const src=map.getSource('route'); if(src) src.setData({type:'Feature',geometry:{type:'LineString',coordinates:[]}}); $('navbanner').style.display='none'; $('searchBar').style.display='flex'; }
+function renderStep(say){ const s=steps[stepIdx]; if(!s)return; $('arrow').innerHTML=maneuverSVG(s); $('navsub').textContent=s.name||shortHint(s); if(say) speak(s.instr);
+  const nx=steps[stepIdx+1];
+  if(nx){ $('navnext2').style.display='flex'; $('arrow2').innerHTML=maneuverSVG(nx); $('nn2txt').textContent='Luego · '+shortHint(nx); } else $('navnext2').style.display='none';
+}
+function endRoute(){ routeOn=false; steps=[]; const src=map.getSource('route'); if(src) src.setData({type:'Feature',geometry:{type:'LineString',coordinates:[]}}); $('navbanner').style.display='none'; $('navnext2').style.display='none'; $('searchBar').style.display='flex'; }
 function trackRoute(){
   if(!routeOn||!disp||!steps.length)return;
   trimRoute();
@@ -293,11 +303,21 @@ function drawPois(){
 // ---------- límite (estimado por tipo de vía si no hay oficial) ----------
 const HWDEF={motorway:120,motorway_link:80,trunk:120,trunk_link:80,primary:90,secondary:90,tertiary:70,unclassified:50,residential:30,living_street:20,service:20,road:50};
 async function fetchLimit(ll){
-  const q=`[out:json][timeout:12];way(around:45,${ll[0]},${ll[1]})[highway];out tags 40;`;
-  try{const r=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:q});const j=await r.json();
-    let best=null;for(const el of (j.elements||[])){const hw=el.tags&&el.tags.highway;if(hw&&hw in HWDEF){best=el;break;}}
-    if(best){limit=parseMax(best.tags.maxspeed)||HWDEF[best.tags.highway]||null;}
-  }catch(e){}
+  const q=`[out:json][timeout:12];way(around:45,${ll[0]},${ll[1]})[highway];out tags geom 60;`;
+  for(const ep of ['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter']){
+    try{
+      const r=await fetch(ep,{method:'POST',body:q}); if(!r.ok) continue;
+      const j=await r.json();
+      let best=null,bd=1e9;
+      for(const el of (j.elements||[])){
+        const hw=el.tags&&el.tags.highway; if(!hw||!(hw in HWDEF)||!el.geometry) continue;
+        let d=1e9; for(let i=1;i<el.geometry.length;i++){ const dd=segDistM(ll,{lat:el.geometry[i-1].lat,lon:el.geometry[i-1].lon},{lat:el.geometry[i].lat,lon:el.geometry[i].lon}); if(dd<d)d=dd; }
+        if(d<bd){ bd=d; best=el; }
+      }
+      if(best){ limit=parseMax(best.tags.maxspeed)||HWDEF[best.tags.highway]||null; return; }
+      return;
+    }catch(e){}
+  }
 }
 
 // ---------- voz + señal de radar acercándose ----------

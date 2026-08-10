@@ -50,9 +50,9 @@
   .navtext{display:flex;flex-direction:column;}
   .navd{font-size:30px;font-weight:800;line-height:1;color:#fff;font-variant-numeric:tabular-nums;}
   .navsub{font-size:13px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:34vw;margin-top:2px;}
-  .navsmall{font-size:11px;color:var(--dim);margin-left:8px;padding-left:10px;border-left:1px solid var(--bd);text-align:right;line-height:1.35;}
+  .trip{bottom:44px;left:10px;font-size:13px;font-weight:700;color:var(--txt);background:rgba(16,18,24,.8);border:1px solid var(--bd);border-radius:10px;padding:7px 11px;}
   .navx{background:transparent;border:0;color:var(--dim);font-size:16px;cursor:pointer;padding:0 2px;}
-  .navnext2{display:none;top:88px;left:50%;transform:translateX(-50%);align-items:center;gap:8px;background:rgba(16,18,24,.8);border:1px solid var(--bd);border-radius:12px;padding:5px 12px;backdrop-filter:blur(12px);}
+  .navnext2{display:none;top:80px;left:10px;align-items:center;gap:8px;background:rgba(16,18,24,.8);border:1px solid var(--bd);border-radius:12px;padding:5px 12px;backdrop-filter:blur(12px);}
   .navnext2 .arrow2{width:30px;height:32px;flex:0 0 auto;} .navnext2 .arrow2 svg{width:100%;height:100%;display:block;}
   .nn2txt{font-size:12px;color:var(--dim);}
 </style></head>
@@ -69,6 +69,7 @@
     <div class="limit" id="limit" style="display:none"><span id="limitn">--</span></div>
     <div class="card"><div class="n" id="spd">0</div><div class="u">KM/H</div></div>
   </div>
+  <div class="ovl trip" id="trip" style="display:none"></div>
   <div class="ovl status" id="status">Buscando GPS…</div>
   <div class="ovl search" id="searchBar">
     <input id="dest" type="text" placeholder="¿A dónde vamos?">
@@ -77,7 +78,6 @@
   <div class="ovl navbanner" id="navbanner">
     <div class="arrow" id="arrow"></div>
     <div class="navtext"><div class="navd" id="navdist">—</div><div class="navsub" id="navsub"></div></div>
-    <div class="navsmall" id="navsmall"></div>
     <button class="navx" id="navx">✕</button>
   </div>
   <div class="ovl navnext2" id="navnext2"><div class="arrow2" id="arrow2"></div><div class="nn2txt" id="nn2txt"></div></div>
@@ -243,7 +243,7 @@ function renderStep(say){ const s=steps[stepIdx]; if(!s)return; $('arrow').inner
   const nx=steps[stepIdx+1];
   if(nx){ $('navnext2').style.display='flex'; $('arrow2').innerHTML=maneuverSVG(nx); $('nn2txt').textContent='Luego · '+shortHint(nx); } else $('navnext2').style.display='none';
 }
-function endRoute(){ routeOn=false; steps=[]; const src=map.getSource('route'); if(src) src.setData({type:'Feature',geometry:{type:'LineString',coordinates:[]}}); $('navbanner').style.display='none'; $('navnext2').style.display='none'; $('searchBar').style.display='flex'; }
+function endRoute(){ routeOn=false; steps=[]; const src=map.getSource('route'); if(src) src.setData({type:'Feature',geometry:{type:'LineString',coordinates:[]}}); $('navbanner').style.display='none'; $('navnext2').style.display='none'; $('trip').style.display='none'; $('searchBar').style.display='flex'; }
 function trackRoute(){
   if(!routeOn||!disp||!steps.length)return;
   trimRoute();
@@ -260,7 +260,7 @@ function trackRoute(){
   let rem=0; for(let i=stepIdx;i<steps.length;i++) rem+=steps[i].distance;
   const mins=Math.max(1,Math.round(rem/(Math.max(8,speedKmh)/3.6)/60));
   const eta=new Date(Date.now()+mins*60000);
-  $('navsmall').textContent=fmtDist(rem)+' · '+(mins>=60?Math.floor(mins/60)+' h '+(mins%60)+' min':mins+' min')+' · '+eta.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+  const tp=$('trip'); tp.style.display='block'; tp.textContent=fmtDist(rem)+' · '+(mins>=60?Math.floor(mins/60)+' h '+(mins%60)+' min':mins+' min')+' · llegada '+eta.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
   if(stepIdx===steps.length-1 && dist(here,destLL)<40){ speak('Has llegado a tu destino'); endRoute(); }
 }
 $('goRoute').onclick=async ()=>{ const q=$('dest').value.trim(); if(!q)return; $('goRoute').textContent='…'; const d=await geocode(q); $('goRoute').textContent='Ir'; if(!d){ $('status').textContent='Destino no encontrado'; return; } routeTo(d); };

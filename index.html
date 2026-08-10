@@ -45,14 +45,15 @@
   .search{top:10px;left:50%;transform:translateX(-50%);display:flex;gap:6px;background:rgba(16,18,24,.8);border:1px solid var(--bd);border-radius:12px;padding:5px;backdrop-filter:blur(12px);}
   .search input{background:#0a0d13;border:1px solid var(--bd);border-radius:9px;color:var(--txt);padding:9px 12px;font-size:14px;width:46vw;max-width:360px;}
   .search button{border:0;background:var(--ok);color:#04130c;font-weight:800;border-radius:9px;padding:0 16px;cursor:pointer;}
-  .navbanner{display:none;top:10px;left:50%;transform:translateX(-50%);align-items:center;gap:12px;background:rgba(16,18,24,.92);border:1px solid var(--bd);border-radius:16px;padding:8px 14px;backdrop-filter:blur(14px);}
+  .navstack{top:10px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:6px;align-items:center;}
+  .navbanner{display:none;align-items:center;gap:12px;background:rgba(16,18,24,.92);border:1px solid var(--bd);border-radius:16px;padding:8px 14px;backdrop-filter:blur(14px);}
   .navbanner .arrow{width:58px;height:62px;flex:0 0 auto;} .navbanner .arrow svg{width:100%;height:100%;display:block;}
   .navtext{display:flex;flex-direction:column;}
   .navd{font-size:30px;font-weight:800;line-height:1;color:#fff;font-variant-numeric:tabular-nums;}
   .navsub{font-size:13px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:34vw;margin-top:2px;}
   .trip{bottom:44px;left:10px;font-size:13px;font-weight:700;color:var(--txt);background:rgba(16,18,24,.8);border:1px solid var(--bd);border-radius:10px;padding:7px 11px;}
   .navx{background:transparent;border:0;color:var(--dim);font-size:16px;cursor:pointer;padding:0 2px;}
-  .navnext2{display:none;top:80px;left:10px;align-items:center;gap:8px;background:rgba(16,18,24,.8);border:1px solid var(--bd);border-radius:12px;padding:5px 12px;backdrop-filter:blur(12px);}
+  .navnext2{display:none;align-self:flex-start;align-items:center;gap:8px;background:rgba(16,18,24,.8);border:1px solid var(--bd);border-radius:12px;padding:5px 12px;backdrop-filter:blur(12px);}
   .navnext2 .arrow2{width:30px;height:32px;flex:0 0 auto;} .navnext2 .arrow2 svg{width:100%;height:100%;display:block;}
   .nn2txt{font-size:12px;color:var(--dim);}
 </style></head>
@@ -75,12 +76,14 @@
     <input id="dest" type="text" placeholder="¿A dónde vamos?">
     <button id="goRoute">Ir</button>
   </div>
-  <div class="ovl navbanner" id="navbanner">
-    <div class="arrow" id="arrow"></div>
-    <div class="navtext"><div class="navd" id="navdist">—</div><div class="navsub" id="navsub"></div></div>
-    <button class="navx" id="navx">✕</button>
+  <div class="ovl navstack" id="navstack">
+    <div class="navbanner" id="navbanner">
+      <div class="arrow" id="arrow"></div>
+      <div class="navtext"><div class="navd" id="navdist">—</div><div class="navsub" id="navsub"></div></div>
+      <button class="navx" id="navx">✕</button>
+    </div>
+    <div class="navnext2" id="navnext2"><div class="arrow2" id="arrow2"></div><div class="nn2txt" id="nn2txt"></div></div>
   </div>
-  <div class="ovl navnext2" id="navnext2"><div class="arrow2" id="arrow2"></div><div class="nn2txt" id="nn2txt"></div></div>
   <button class="ovl daynight" id="daynight">☀️</button>
   <button class="ovl recenter" id="recenter">🎯</button>
 

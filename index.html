@@ -41,6 +41,16 @@
   /* marcador del coche */
   #car3{width:0;height:0;border-left:12px solid transparent;border-right:12px solid transparent;border-bottom:26px solid var(--ok);filter:drop-shadow(0 2px 4px rgba(0,0,0,.6));}
   .maplibregl-ctrl-attrib{font-size:9px;}
+  .search{top:10px;left:50%;transform:translateX(-50%);display:flex;gap:6px;background:rgba(16,18,24,.8);border:1px solid var(--bd);border-radius:12px;padding:5px;backdrop-filter:blur(12px);}
+  .search input{background:#0a0d13;border:1px solid var(--bd);border-radius:9px;color:var(--txt);padding:9px 12px;font-size:14px;width:46vw;max-width:360px;}
+  .search button{border:0;background:var(--ok);color:#04130c;font-weight:800;border-radius:9px;padding:0 16px;cursor:pointer;}
+  .navbanner{display:none;top:10px;left:50%;transform:translateX(-50%);align-items:center;gap:10px;background:rgba(16,18,24,.92);border:1px solid var(--bd);border-radius:14px;padding:9px 12px;backdrop-filter:blur(14px);max-width:74vw;}
+  .navbanner .arrow{width:40px;height:40px;flex:0 0 auto;} .navbanner .arrow svg{width:100%;height:100%;display:block;}
+  .navmain{font-size:19px;font-weight:700;line-height:1.05;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:42vw;}
+  .navsub{font-size:12px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:42vw;}
+  .navmeta{margin-left:4px;padding-left:10px;border-left:1px solid var(--bd);text-align:right;}
+  .navdist{font-size:17px;font-weight:700;color:var(--ok);font-variant-numeric:tabular-nums;} .navsmall{font-size:10px;color:var(--dim);}
+  .navx{background:transparent;border:0;color:var(--dim);font-size:16px;cursor:pointer;padding:0 2px;}
 </style></head>
 <body>
 <div id="app">
@@ -56,6 +66,16 @@
     <div class="card"><div class="n" id="spd">0</div><div class="u">KM/H</div></div>
   </div>
   <div class="ovl status" id="status">Buscando GPS…</div>
+  <div class="ovl search" id="searchBar">
+    <input id="dest" type="text" placeholder="¿A dónde vamos?">
+    <button id="goRoute">Ir</button>
+  </div>
+  <div class="ovl navbanner" id="navbanner">
+    <div class="arrow" id="arrow"></div>
+    <div class="navtext"><div class="navmain" id="navmain">—</div><div class="navsub" id="navsub"></div></div>
+    <div class="navmeta"><div class="navdist" id="navdist"></div><div class="navsmall" id="navsmall"></div></div>
+    <button class="navx" id="navx">✕</button>
+  </div>
   <button class="ovl recenter" id="recenter">🎯</button>
 
   <div class="radarsign" id="radarsign"><div class="rs-c"><span id="rsmax">80</span></div><div class="rs-p"></div><div class="rs-d" id="rsdist">500 m</div></div>
@@ -101,6 +121,8 @@ function moveLL(lat,lon,head,dm){ // avanza dm metros desde lat/lon con rumbo he
 function angLerp(a,b,t){let d=((b-a+540)%360)-180;return (a+d*t+360)%360;}
 
 // ---------- GPS ----------
+if(!window.isSecureContext){ $('status').innerHTML='⚠ Ábrelo con <b>https://</b> (no el archivo local) para el GPS'; }
+function locate(){ if(navigator.geolocation) navigator.geolocation.getCurrentPosition(()=>{}, e=>{$('status').textContent='GPS: '+e.message;}, {enableHighAccuracy:true,timeout:20000}); }
 navigator.geolocation && navigator.geolocation.watchPosition(p=>{
   const c=p.coords, now=p.timestamp;
   let v=c.speed; if(v==null||isNaN(v)){ if(raw){const dt=(now-raw.t)/1000; v=dt>0?dist([raw.lat,raw.lon],[c.latitude,c.longitude])/dt:0;} else v=0; }
@@ -108,7 +130,8 @@ navigator.geolocation && navigator.geolocation.watchPosition(p=>{
   speedKmh=Math.max(0,v*3.6);
   raw={lat:c.latitude,lon:c.longitude,head:head||0,spd:v||0,t:now};
   if(!disp) disp={lat:raw.lat,lon:raw.lon,head:raw.head};
-  $('status').textContent='GPS ±'+Math.round(c.accuracy||0)+' m';
+  const acc=Math.round(c.accuracy||0);
+  $('status').textContent='GPS '+c.latitude.toFixed(4)+', '+c.longitude.toFixed(4)+' · ±'+acc+' m'+(acc>800?' (impreciso: WiFi/IP, no GPS real)':' ✔');
   const here=[raw.lat,raw.lon];
   if(!lastPoiPos||dist(lastPoiPos,here)>800||now-lastPoiAt>60000){lastPoiAt=now;lastPoiPos=here;fetchPois(here);fetchLimit(here);}
 },e=>{$('status').textContent='GPS: '+e.message;},{enableHighAccuracy:true,maximumAge:1000,timeout:20000});
@@ -131,12 +154,79 @@ function frame(now){
   if(limit){ $('limit').style.display='flex'; $('limitn').textContent=limit; $('spd').classList.toggle('over',speedKmh>limit+3); }
   else $('limit').style.display='none';
   updateRadar();
+  if(routeOn) trackRoute();
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+locate();   // fuerza el aviso de permiso al abrir
+
+
+// ---------- navegación con destino (Nominatim + OSRM) ----------
+let routeOn=false, steps=[], stepIdx=0, destLL=null, routeGeom=[], offAcc=0, lastRecalc=0;
+const rot={'straight':0,'slight right':40,'right':90,'sharp right':135,'uturn':180,'sharp left':-135,'left':-90,'slight left':-40};
+function arrowSVG(mod){return '<svg viewBox="0 0 44 44"><path d="M22 6 L22 38 M22 6 L12 17 M22 6 L32 17" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" transform="rotate('+(rot[mod]||0)+' 22 22)"/></svg>';}
+function instrES(s){
+  const m=s.maneuver||{}, mod=m.modifier, type=m.type, name=s.name||'';
+  const dir={'left':'gira a la izquierda','right':'gira a la derecha','slight left':'ligeramente a la izquierda','slight right':'ligeramente a la derecha','sharp left':'giro cerrado a la izquierda','sharp right':'giro cerrado a la derecha','straight':'sigue recto','uturn':'haz el cambio de sentido'};
+  if(type==='depart') return 'Comienza la ruta'+(name?' por '+name:'');
+  if(type==='arrive') return 'Has llegado a tu destino';
+  if(type==='roundabout'||type==='rotary') return 'En la rotonda, toma la salida '+(m.exit||'');
+  if(type==='merge') return 'Incorpórate'+(name?' a '+name:'');
+  if(type==='on ramp') return 'Toma la incorporación'+(name?' a '+name:'');
+  if(type==='off ramp') return 'Toma la salida'+(name?' hacia '+name:'');
+  if(type==='fork') return (mod&&mod.indexOf('left')>=0)?'En la bifurcación, mantente a la izquierda':'En la bifurcación, mantente a la derecha';
+  const d=dir[mod]||'continúa'; return d.charAt(0).toUpperCase()+d.slice(1)+(name?' por '+name:'');
+}
+function segDistM(p,a,b){const mx=111320*Math.cos(p[0]*Math.PI/180),my=110540;const px=p[1]*mx,py=p[0]*my,ax=a.lon*mx,ay=a.lat*my,bx=b.lon*mx,by=b.lat*my;const dx=bx-ax,dy=by-ay,L2=dx*dx+dy*dy;let t=L2?((px-ax)*dx+(py-ay)*dy)/L2:0;t=Math.max(0,Math.min(1,t));return Math.hypot(px-(ax+t*dx),py-(ay+t*dy));}
+function distToRoute(here){let best=1e9;for(let i=1;i<routeGeom.length;i++){const dd=segDistM(here,{lat:routeGeom[i-1][0],lon:routeGeom[i-1][1]},{lat:routeGeom[i][0],lon:routeGeom[i][1]});if(dd<best)best=dd;}return best;}
+function ensureRouteLayer(){ if(map.getSource('route'))return; try{
+  map.addSource('route',{type:'geojson',data:{type:'Feature',geometry:{type:'LineString',coordinates:[]}}});
+  map.addLayer({id:'route-cas',type:'line',source:'route',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#0a3fb0','line-width':11,'line-opacity':.5}});
+  map.addLayer({id:'route',type:'line',source:'route',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#4c8dff','line-width':6}});
+}catch(e){} }
+map.on('load',ensureRouteLayer);
+function drawRoute(coords){ ensureRouteLayer(); const src=map.getSource('route'); if(src) src.setData({type:'Feature',geometry:{type:'LineString',coordinates:coords}}); routeGeom=coords.map(c=>[c[1],c[0]]); }
+async function geocode(q){ try{ const r=await fetch('https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(q)+'&format=json&limit=1&countrycodes=es&accept-language=es'); const j=await r.json(); if(j&&j.length) return [parseFloat(j[0].lat),parseFloat(j[0].lon)]; }catch(e){} return null; }
+async function routeTo(dest){
+  if(!raw){ $('status').textContent='Sin GPS todavía'; return; }
+  const o=[raw.lat,raw.lon];
+  try{
+    const url='https://router.project-osrm.org/route/v1/driving/'+o[1]+','+o[0]+';'+dest[1]+','+dest[0]+'?overview=full&geometries=geojson&steps=true';
+    const r=await fetch(url); const j=await r.json();
+    if(!j.routes||!j.routes.length){ $('status').textContent='Sin ruta'; return; }
+    const rt=j.routes[0]; drawRoute(rt.geometry.coordinates);
+    steps=rt.legs.flatMap(l=>l.steps).map(s=>({distance:s.distance,name:s.name,maneuver:s.maneuver,ll:[s.maneuver.location[1],s.maneuver.location[0]],instr:instrES(s),_min:1e9,_v:false}));
+    stepIdx=0; destLL=dest; routeOn=true; offAcc=0;
+    $('searchBar').style.display='none'; $('navbanner').style.display='flex';
+    renderStep(true);
+  }catch(e){ $('status').textContent='Error de ruta'; }
+}
+function renderStep(say){ const s=steps[stepIdx]; if(!s)return; $('arrow').innerHTML=arrowSVG((s.maneuver&&s.maneuver.modifier)||'straight'); $('navmain').textContent=s.instr; $('navsub').textContent=s.name||''; if(say) speak(s.instr); }
+function endRoute(){ routeOn=false; steps=[]; const src=map.getSource('route'); if(src) src.setData({type:'Feature',geometry:{type:'LineString',coordinates:[]}}); $('navbanner').style.display='none'; $('searchBar').style.display='flex'; }
+function trackRoute(){
+  if(!routeOn||!disp||!steps.length)return;
+  const here=[disp.lat,disp.lon];
+  const dr=distToRoute(here);
+  if(dr>70) offAcc++; else offAcc=0;
+  if(offAcc>25 && performance.now()-lastRecalc>8000){ lastRecalc=performance.now(); offAcc=0; speak('Recalculando ruta'); routeTo(destLL); return; }
+  let s=steps[stepIdx]; let d=dist(here,s.ll); s._min=Math.min(s._min,d);
+  if(!s._v && d<320 && d>70){ s._v=true; speak('En '+fmtDist(d)+', '+s.instr); }
+  const thr=Math.max(20,(raw.spd||0)*1.4);
+  const passed = s._min<55 && d>s._min+15;
+  if((d<thr||passed) && stepIdx<steps.length-1){ stepIdx++; renderStep(true); s=steps[stepIdx]; d=dist(here,s.ll); }
+  $('navdist').textContent='En '+fmtDist(d);
+  let rem=0; for(let i=stepIdx;i<steps.length;i++) rem+=steps[i].distance;
+  const mins=Math.max(1,Math.round(rem/(Math.max(8,speedKmh)/3.6)/60));
+  const eta=new Date(Date.now()+mins*60000);
+  $('navsmall').textContent=fmtDist(rem)+' · '+(mins>=60?Math.floor(mins/60)+' h '+(mins%60)+' min':mins+' min')+' · '+eta.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+  if(stepIdx===steps.length-1 && dist(here,destLL)<40){ speak('Has llegado a tu destino'); endRoute(); }
+}
+$('goRoute').onclick=async ()=>{ const q=$('dest').value.trim(); if(!q)return; $('goRoute').textContent='…'; const d=await geocode(q); $('goRoute').textContent='Ir'; if(!d){ $('status').textContent='Destino no encontrado'; return; } routeTo(d); };
+$('dest').addEventListener('keydown',e=>{ if(e.key==='Enter') $('goRoute').click(); });
+$('navx').onclick=endRoute;
 
 map.on('dragstart',()=>{follow=false;});
-$('recenter').onclick=()=>{ follow=true; if(disp) map.easeTo({center:[disp.lon,disp.lat],bearing:disp.head,zoom:15,pitch:55}); };
+$('recenter').onclick=()=>{ follow=true; locate(); if(disp) map.easeTo({center:[disp.lon,disp.lat],bearing:disp.head,zoom:15,pitch:55}); };
 
 // ---------- POIs (Overpass): radares + cargadores ----------
 function parseMax(v){ if(!v) return null; const m=(''+v).match(/\d+/); return m?parseInt(m[0]):null; }

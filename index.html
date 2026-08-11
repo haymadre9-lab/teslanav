@@ -112,6 +112,13 @@ let raw=null;              // última lectura GPS {lat,lon,head,spd,t}
 let disp=null;            // posición mostrada (suavizada) {lat,lon,head}
 let follow=true, speedKmh=0, limit=null;
 let pois=[], lastPoiPos=null, lastPoiAt=0, lastLimPos=null, lastLimAt=0;
+let radarDB=[], radars=[];
+fetch('radares.json').then(r=>r.json()).then(d=>{ radarDB=d; if(disp) refreshRadars([disp.lat,disp.lon]); }).catch(()=>{});
+function refreshRadars(here){
+  const out=[];
+  for(const p of radarDB){ const d=dist(here,[p.lat,p.lon]); if(d<9000) out.push({type:'radar',ll:[p.lat,p.lon],max:p.max,t:p.t,_al:false}); }
+  radars=out; drawPois();
+}
 
 function dist(a,b){const R=6371000,dLat=(b[0]-a[0])*Math.PI/180,dLon=(b[1]-a[1])*Math.PI/180,
   la1=a[0]*Math.PI/180,la2=b[0]*Math.PI/180;const x=Math.sin(dLat/2)**2+Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2;
@@ -141,7 +148,7 @@ navigator.geolocation && navigator.geolocation.watchPosition(p=>{
   const acc=Math.round(c.accuracy||0);
   $('status').textContent='GPS '+c.latitude.toFixed(4)+', '+c.longitude.toFixed(4)+' · ±'+acc+' m'+(acc>800?' (impreciso: WiFi/IP, no GPS real)':' ✔');
   const here=[raw.lat,raw.lon];
-  if(!lastPoiPos||dist(lastPoiPos,here)>800||now-lastPoiAt>60000){lastPoiAt=now;lastPoiPos=here;fetchPois(here);}
+  if(!lastPoiPos||dist(lastPoiPos,here)>800||now-lastPoiAt>60000){lastPoiAt=now;lastPoiPos=here;fetchPois(here);refreshRadars(here);}
   if(!lastLimPos||dist(lastLimPos,here)>60||now-lastLimAt>8000){lastLimAt=now;lastLimPos=here;fetchLimit(here);}
 },e=>{$('status').textContent='GPS: '+e.message;},{enableHighAccuracy:true,maximumAge:1000,timeout:20000});
 
@@ -277,7 +284,7 @@ $('recenter').onclick=()=>{ follow=true; locate(); if(disp) map.easeTo({center:[
 function parseMax(v){ if(!v) return null; const m=(''+v).match(/\d+/); return m?parseInt(m[0]):null; }
 async function fetchPois(ll){
   const R=6000;
-  const q=`[out:json][timeout:25];(node(around:${R},${ll[0]},${ll[1]})[highway=speed_camera];node(around:${R},${ll[0]},${ll[1]})[enforcement=maxspeed];node(around:${R},${ll[0]},${ll[1]})[amenity=charging_station];);out tags center;`;
+  const q=`[out:json][timeout:25];(node(around:${R},${ll[0]},${ll[1]})[amenity=charging_station];);out tags center;`;
   let j=null;
   for(const ep of ['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter']){
     try{const r=await fetch(ep,{method:'POST',body:q});if(r.ok){j=await r.json();if(j)break;}}catch(e){}
@@ -287,18 +294,19 @@ async function fetchPois(ll){
   for(const e of (j.elements||[])){
     const lat=e.lat||(e.center&&e.center.lat),lon=e.lon||(e.center&&e.center.lon); if(lat==null)continue;
     const tg=e.tags||{};
-    if(tg.highway==='speed_camera'||tg.enforcement==='maxspeed') arr.push({type:'radar',ll:[lat,lon],max:parseMax(tg.maxspeed),_al:false});
-    else if(tg.amenity==='charging_station') arr.push({type:'charge',ll:[lat,lon]});
+    if(tg.amenity==='charging_station') arr.push({type:'charge',ll:[lat,lon]});
   }
   pois=arr; drawPois();
 }
 let poiMarkers=[];
 function drawPois(){
   poiMarkers.forEach(m=>m.remove()); poiMarkers=[];
-  for(const p of pois){
-    const el=document.createElement('div');
-    if(p.type==='charge'){ el.style.cssText='width:14px;height:14px;border-radius:50%;background:#39d98a;border:2px solid #04130c;'; }
-    else { el.style.cssText='width:16px;height:16px;border-radius:50%;background:#e01d1d;border:2px solid #fff;'; }
+  for(const p of pois){ if(p.type!=='charge')continue;
+    const el=document.createElement('div'); el.style.cssText='width:14px;height:14px;border-radius:50%;background:#39d98a;border:2px solid #04130c;';
+    poiMarkers.push(new maplibregl.Marker({element:el}).setLngLat([p.ll[1],p.ll[0]]).addTo(map));
+  }
+  for(const p of radars){
+    const el=document.createElement('div'); el.style.cssText='width:15px;height:15px;border-radius:50%;background:#e01d1d;border:2px solid #fff;';
     poiMarkers.push(new maplibregl.Marker({element:el}).setLngLat([p.ll[1],p.ll[0]]).addTo(map));
   }
 }
@@ -329,8 +337,7 @@ function speak(t){try{const u=new SpeechSynthesisUtterance(t);u.lang='es-ES';if(
 function updateRadar(){
   if(!disp){return;}
   let best=null;
-  for(const p of pois){
-    if(p.type!=='radar')continue;
+  for(const p of radars){
     p.dist=dist([disp.lat,disp.lon],p.ll);
     const ah=Math.abs(((bearing([disp.lat,disp.lon],p.ll)-disp.head+540)%360)-180)<95;
     if(!ah)continue;

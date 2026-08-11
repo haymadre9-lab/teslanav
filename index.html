@@ -42,6 +42,11 @@
   #car3{width:0;height:0;border-left:12px solid transparent;border-right:12px solid transparent;border-bottom:26px solid var(--ok);filter:drop-shadow(0 2px 4px rgba(0,0,0,.6));}
   .maplibregl-ctrl-attrib{font-size:9px;}
   .daynight{bottom:10px;right:64px;background:rgba(16,18,24,.8);border:1px solid var(--bd);color:var(--txt);border-radius:12px;padding:10px 12px;cursor:pointer;font-size:15px;}
+  .traffic{bottom:10px;right:118px;background:rgba(16,18,24,.8);border:1px solid var(--bd);color:var(--txt);border-radius:12px;padding:10px 12px;cursor:pointer;font-size:15px;}
+  .traffic.on{background:var(--ok);}
+  .ttwrap{bottom:56px;right:10px;display:flex;gap:6px;background:rgba(16,18,24,.85);border:1px solid var(--bd);border-radius:10px;padding:5px;}
+  .ttwrap input{background:#0a0d13;border:1px solid var(--bd);border-radius:8px;color:var(--txt);padding:8px;font-size:12px;width:180px;}
+  .ttwrap button{border:0;background:var(--ok);color:#04130c;font-weight:800;border-radius:8px;padding:0 12px;cursor:pointer;}
   .search{top:10px;left:50%;transform:translateX(-50%);display:flex;gap:6px;background:rgba(16,18,24,.8);border:1px solid var(--bd);border-radius:12px;padding:5px;backdrop-filter:blur(12px);}
   .search input{background:#0a0d13;border:1px solid var(--bd);border-radius:9px;color:var(--txt);padding:9px 12px;font-size:14px;width:46vw;max-width:360px;}
   .search button{border:0;background:var(--ok);color:#04130c;font-weight:800;border-radius:9px;padding:0 16px;cursor:pointer;}
@@ -70,6 +75,7 @@
     <div class="limit" id="limit" style="display:none"><span id="limitn">--</span></div>
     <div class="card"><div class="n" id="spd">0</div><div class="u">KM/H</div></div>
   </div>
+  <div class="ovl ttwrap" id="ttWrap" style="display:none"><input id="ttKey" type="text" placeholder="Clave TomTom (tráfico)" autocomplete="off"><button id="ttSave">Guardar</button></div>
   <div class="ovl trip" id="trip" style="display:none"></div>
   <div class="ovl status" id="status">Buscando GPS…</div>
   <div class="ovl search" id="searchBar">
@@ -84,6 +90,7 @@
     </div>
     <div class="navnext2" id="navnext2"><div class="arrow2" id="arrow2"></div><div class="nn2txt" id="nn2txt"></div></div>
   </div>
+  <button class="ovl traffic" id="traffic">🚦</button>
   <button class="ovl daynight" id="daynight">☀️</button>
   <button class="ovl recenter" id="recenter">🎯</button>
 
@@ -222,10 +229,34 @@ function ensureRouteLayer(){ if(map.getSource('route'))return; try{
   map.addLayer({id:'route',type:'line',source:'route',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#4c8dff','line-width':6}});
 }catch(e){} }
 map.on('load',ensureRouteLayer);
+map.on('load',()=>setTraffic(true));
 let mapNight=false;
 function setMapMode(night){ try{ map.setLayoutProperty('day','visibility',night?'none':'visible'); map.setLayoutProperty('night','visibility',night?'visible':'none'); }catch(e){} mapNight=night; $('daynight').textContent=night?'☀️':'🌙'; }
 $('daynight').onclick=()=>setMapMode(!mapNight);
 $('daynight').textContent='🌙';
+// ---- tráfico TomTom (capa gratuita, requiere clave) ----
+let trafficOn=false;
+const TTKEY_DEFAULT="zMPqeYVXNoQw4rJ1ycr8QdywkDFNx0tF";
+$('ttKey').value=localStorage.getItem('ttKey')||TTKEY_DEFAULT;
+$('ttSave').onclick=()=>{ localStorage.setItem('ttKey',$('ttKey').value.trim()); $('ttWrap').style.display='none'; setTraffic(true); };
+function setTraffic(on){
+  const key=(localStorage.getItem('ttKey')||TTKEY_DEFAULT).trim();
+  if(on && !key){ $('ttWrap').style.display='flex'; $('status').textContent='Pega tu clave gratuita de TomTom para el tráfico'; return; }
+  try{
+    if(on){
+      if(!map.getSource('traffic')){
+        map.addSource('traffic',{type:'raster',tiles:['https://api.tomtom.com/traffic/map/4/tile/flow/relative0/{z}/{x}/{y}.png?key='+key],tileSize:256});
+        const before=map.getLayer('route-cas')?'route-cas':undefined;
+        map.addLayer({id:'traffic',type:'raster',source:'traffic',paint:{'raster-opacity':0.9}}, before);
+      } else map.setLayoutProperty('traffic','visibility','visible');
+      trafficOn=true; $('traffic').classList.add('on');
+    }else{
+      if(map.getLayer('traffic')) map.setLayoutProperty('traffic','visibility','none');
+      trafficOn=false; $('traffic').classList.remove('on');
+    }
+  }catch(e){ $('status').textContent='Tráfico: '+e.message; }
+}
+$('traffic').onclick=()=>setTraffic(!trafficOn);
 let routeCoords=[], routeProgIdx=0;
 function drawRoute(coords){ ensureRouteLayer(); routeCoords=coords; routeProgIdx=0; const src=map.getSource('route'); if(src) src.setData({type:'Feature',geometry:{type:'LineString',coordinates:coords}}); routeGeom=coords.map(c=>[c[1],c[0]]); }
 function trimRoute(){

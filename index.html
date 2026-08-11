@@ -119,7 +119,7 @@ const map=new maplibregl.Map({
     day:{type:'raster',tiles:['https://api.tomtom.com/map/1/tile/basic/main/{z}/{x}/{y}.png?key='+TT+'&tileSize=256'],tileSize:256,attribution:'© TomTom'},
     night:{type:'raster',tiles:['https://api.tomtom.com/map/1/tile/basic/night/{z}/{x}/{y}.png?key='+TT+'&tileSize=256'],tileSize:256,attribution:'© TomTom'}},
     layers:[{id:'bg',type:'background',paint:{'background-color':'#0a0e17'}},{id:'day',type:'raster',source:'day'},{id:'night',type:'raster',source:'night',layout:{visibility:'none'}}]},
-  center:[-2.93,43.26], zoom:15.6, pitch:50, bearing:0, dragRotate:true, maxTileCacheSize:45, fadeDuration:0
+  center:[-2.93,43.26], zoom:15.6, pitch:45, bearing:0, dragRotate:true, maxTileCacheSize:60, fadeDuration:0
 });
 const carEl=document.createElement('div'); carEl.id='car3';
 const carMk=new maplibregl.Marker({element:carEl,rotationAlignment:'map'}).setLngLat([-2.93,43.26]).addTo(map);
@@ -166,28 +166,33 @@ navigator.geolocation && navigator.geolocation.watchPosition(p=>{
   $('status').textContent='GPS '+c.latitude.toFixed(4)+', '+c.longitude.toFixed(4)+' · ±'+acc+' m'+(acc>800?' (impreciso: WiFi/IP, no GPS real)':' ✔');
   const here=[raw.lat,raw.lon];
   if(!lastPoiPos||dist(lastPoiPos,here)>800||now-lastPoiAt>60000){lastPoiAt=now;lastPoiPos=here;fetchPois(here);refreshRadars(here);}
-  if(!lastLimPos||dist(lastLimPos,here)>60||now-lastLimAt>8000){lastLimAt=now;lastLimPos=here;fetchLimit(here);}
+  if(!lastLimPos||dist(lastLimPos,here)>250||now-lastLimAt>20000){lastLimAt=now;lastLimPos=here;fetchLimit(here);}
 },e=>{$('status').textContent='GPS: '+e.message;},{enableHighAccuracy:true,maximumAge:1000,timeout:20000});
 
 // ---------- bucle de render (interpolación suave) ----------
 let last=performance.now();
+let lastCam=0, lastLogic=0, interacting=false;
 function frame(now){
-  const dt=Math.min(0.1,(now-last)/1000); last=now;
-  if(disp && raw){
-    // 1) avanza por estima (dead-reckoning) según velocidad y rumbo
-    if(raw.spd>0.5){ const step=raw.spd*dt; const nx=moveLL(disp.lat,disp.lon,disp.head,step); disp.lat=nx[0]; disp.lon=nx[1]; }
-    // 2) corrige suavemente hacia la lectura real (evita deriva)
-    disp.lat += (raw.lat-disp.lat)*Math.min(1,dt*1.8);
-    disp.lon += (raw.lon-disp.lon)*Math.min(1,dt*1.8);
-    disp.head = angLerp(disp.head, raw.head, Math.min(1,dt*3));
-    carMk.setLngLat([disp.lon,disp.lat]); carMk.setRotation(disp.head);
-    if(follow){ const ah=moveLL(disp.lat,disp.lon,disp.head,55); map.jumpTo({center:[ah[1],ah[0]], bearing:disp.head}); }
-  }
-  $('spd').textContent=Math.round(speedKmh);
-  if(limit){ $('limit').style.display='flex'; $('limitn').textContent=limit; $('spd').classList.toggle('over',speedKmh>limit+3); }
-  else $('limit').style.display='none';
-  updateRadar();
-  if(routeOn) trackRoute();
+  if(interacting){ requestAnimationFrame(frame); return; }   // deja el mapa libre al arrastrar
+  try{
+    const dt=Math.min(0.1,(now-last)/1000); last=now;
+    if(disp && raw){
+      if(raw.spd>0.5){ const step=raw.spd*dt; const nx=moveLL(disp.lat,disp.lon,disp.head,step); disp.lat=nx[0]; disp.lon=nx[1]; }
+      disp.lat += (raw.lat-disp.lat)*Math.min(1,dt*1.8);
+      disp.lon += (raw.lon-disp.lon)*Math.min(1,dt*1.8);
+      disp.head = angLerp(disp.head, raw.head, Math.min(1,dt*3));
+      carMk.setLngLat([disp.lon,disp.lat]); carMk.setRotation(disp.head);
+      if(follow && now-lastCam>33){ lastCam=now; const ah=moveLL(disp.lat,disp.lon,disp.head,95); map.jumpTo({center:[ah[1],ah[0]], bearing:disp.head}); }
+    }
+    $('spd').textContent=Math.round(speedKmh);
+    if(now-lastLogic>100){
+      lastLogic=now;
+      if(limit){ $('limit').style.display='flex'; $('limitn').textContent=limit; $('spd').classList.toggle('over',speedKmh>limit+3); }
+      else $('limit').style.display='none';
+      updateRadar();
+      if(routeOn) trackRoute();
+    }
+  }catch(e){}
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
@@ -234,6 +239,7 @@ function instrES(s){
 function segDistM(p,a,b){const mx=111320*Math.cos(p[0]*Math.PI/180),my=110540;const px=p[1]*mx,py=p[0]*my,ax=a.lon*mx,ay=a.lat*my,bx=b.lon*mx,by=b.lat*my;const dx=bx-ax,dy=by-ay,L2=dx*dx+dy*dy;let t=L2?((px-ax)*dx+(py-ay)*dy)/L2:0;t=Math.max(0,Math.min(1,t));return Math.hypot(px-(ax+t*dx),py-(ay+t*dy));}
 function distToRoute(here){let best=1e9;for(let i=1;i<routeGeom.length;i++){const dd=segDistM(here,{lat:routeGeom[i-1][0],lon:routeGeom[i-1][1]},{lat:routeGeom[i][0],lon:routeGeom[i][1]});if(dd<best)best=dd;}return best;}
 function ensureRouteLayer(){ if(map.getSource('route'))return; try{
+  if(!map.getSource('radars-src')){ map.addSource('radars-src',{type:'geojson',data:{type:'FeatureCollection',features:[]}}); map.addLayer({id:'radars-lyr',type:'circle',source:'radars-src',paint:{'circle-radius':6,'circle-color':'#e01d1d','circle-stroke-color':'#fff','circle-stroke-width':2}}); }
   map.addSource('route',{type:'geojson',data:{type:'Feature',geometry:{type:'LineString',coordinates:[]}}});
   map.addLayer({id:'route-cas',type:'line',source:'route',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#0a3fb0','line-width':11,'line-opacity':.5}});
   map.addLayer({id:'route',type:'line',source:'route',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':'#4c8dff','line-width':6}});
@@ -268,8 +274,10 @@ function setTraffic(on){
 $('traffic').onclick=()=>setTraffic(!trafficOn);
 let routeCoords=[], routeProgIdx=0;
 function drawRoute(coords){ ensureRouteLayer(); routeCoords=coords; routeProgIdx=0; const src=map.getSource('route'); if(src) src.setData({type:'Feature',geometry:{type:'LineString',coordinates:coords}}); routeGeom=coords.map(c=>[c[1],c[0]]); }
+let lastTrim=0;
 function trimRoute(){
   if(!routeCoords.length||!disp)return;
+  const nowp=performance.now(); if(nowp-lastTrim<1200) return; lastTrim=nowp;
   let bi=routeProgIdx,bd=1e9; const end=Math.min(routeCoords.length,routeProgIdx+80);
   for(let i=routeProgIdx;i<end;i++){ const dd=dist([disp.lat,disp.lon],[routeCoords[i][1],routeCoords[i][0]]); if(dd<bd){bd=dd;bi=i;} }
   if(bi!==routeProgIdx){ routeProgIdx=bi; const ahead=[[disp.lon,disp.lat]].concat(routeCoords.slice(routeProgIdx)); const src=map.getSource('route'); if(src) src.setData({type:'Feature',geometry:{type:'LineString',coordinates:ahead}}); }
@@ -384,7 +392,9 @@ async function renderSuggest(q){
   }catch(e){ box.style.display='none'; }
 }
 
-map.on('dragstart',()=>{follow=false;});
+map.on('dragstart',()=>{ follow=false; interacting=true; });
+map.on('dragend',()=>{ interacting=false; });
+map.on('zoomstart',()=>{ interacting=true; }); map.on('zoomend',()=>{ interacting=false; });
 $('recenter').onclick=()=>{ follow=true; locate(); if(disp) map.easeTo({center:[disp.lon,disp.lat],bearing:disp.head,zoom:15.6,pitch:55}); };
 
 // ---------- POIs (Overpass): radares + cargadores ----------
@@ -407,6 +417,7 @@ async function fetchPois(ll){
 }
 let poiMarkers=[];
 function drawPois(){
+  // cargadores: pocos, como marcadores con icono de surtidor y click
   poiMarkers.forEach(m=>m.remove()); poiMarkers=[];
   for(const p of pois){ if(p.type!=='charge')continue;
     const el=document.createElement('div'); el.style.cssText='cursor:pointer;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6));';
@@ -414,10 +425,9 @@ function drawPois(){
     el.addEventListener('click',()=>chargerPopup(p));
     poiMarkers.push(new maplibregl.Marker({element:el}).setLngLat([p.ll[1],p.ll[0]]).addTo(map));
   }
-  if(disp) for(const p of radars){ if(dist([disp.lat,disp.lon],p.ll)>3000) continue;
-    const el=document.createElement('div'); el.style.cssText='width:15px;height:15px;border-radius:50%;background:#e01d1d;border:2px solid #fff;';
-    poiMarkers.push(new maplibregl.Marker({element:el}).setLngLat([p.ll[1],p.ll[0]]).addTo(map));
-  }
+  // radares: muchos, en capa GPU (setData) para no saturar
+  const src=map.getSource('radars-src');
+  if(src) src.setData({type:'FeatureCollection',features:radars.map(p=>({type:'Feature',geometry:{type:'Point',coordinates:[p.ll[1],p.ll[0]]},properties:{}}))});
 }
 
 // ---------- límite (estimado por tipo de vía si no hay oficial) ----------

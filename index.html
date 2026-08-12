@@ -116,12 +116,13 @@ $('hudcar').src=DAY;
 const map=new maplibregl.Map({
   container:'map', attributionControl:{compact:true},
   style:{version:8,sources:{
-    day:{type:'raster',tiles:['https://api.tomtom.com/map/1/tile/basic/main/{z}/{x}/{y}.png?key='+TT+'&tileSize=256'],tileSize:256,attribution:'© TomTom'},
-    night:{type:'raster',tiles:['https://api.tomtom.com/map/1/tile/basic/night/{z}/{x}/{y}.png?key='+TT+'&tileSize=256'],tileSize:256,attribution:'© TomTom'}},
+    day:{type:'raster',tiles:['https://api.tomtom.com/map/1/tile/basic/main/{z}/{x}/{y}.png?key='+TT+'&tileSize=512'],tileSize:512,attribution:'© TomTom'},
+    night:{type:'raster',tiles:['https://api.tomtom.com/map/1/tile/basic/night/{z}/{x}/{y}.png?key='+TT+'&tileSize=512'],tileSize:512,attribution:'© TomTom'}},
     layers:[{id:'bg',type:'background',paint:{'background-color':'#0a0e17'}},{id:'day',type:'raster',source:'day'},{id:'night',type:'raster',source:'night',layout:{visibility:'none'}}]},
-  center:[-2.93,43.26], zoom:15.6, pitch:45, bearing:0, dragRotate:true, maxTileCacheSize:60, fadeDuration:0
+  center:[-2.93,43.26], zoom:15.6, minZoom:5, maxZoom:18, pitch:0, bearing:0, dragRotate:false, pitchWithRotate:false, touchPitch:false, maxTileCacheSize:60, fadeDuration:0, renderWorldCopies:false
 });
 const carEl=document.createElement('div'); carEl.id='car3';
+try{ map.dragRotate.disable(); map.touchZoomRotate.disableRotation(); map.keyboard.disableRotation&&map.keyboard.disableRotation(); }catch(e){}
 const carMk=new maplibregl.Marker({element:carEl,rotationAlignment:'map'}).setLngLat([-2.93,43.26]).addTo(map);
 
 // ---------- estado / interpolación ----------
@@ -182,7 +183,7 @@ function frame(now){
       disp.lon += (raw.lon-disp.lon)*Math.min(1,dt*1.8);
       disp.head = angLerp(disp.head, raw.head, Math.min(1,dt*3));
       carMk.setLngLat([disp.lon,disp.lat]); carMk.setRotation(disp.head);
-      if(follow && now-lastCam>33){ lastCam=now; const ah=moveLL(disp.lat,disp.lon,disp.head,95); map.jumpTo({center:[ah[1],ah[0]], bearing:disp.head}); }
+      if(follow && now-lastCam>45){ lastCam=now; const ah=moveLL(disp.lat,disp.lon,disp.head,95); map.jumpTo({center:[ah[1],ah[0]], bearing:disp.head}); }
     }
     $('spd').textContent=Math.round(speedKmh);
     if(now-lastLogic>100){
@@ -395,7 +396,7 @@ async function renderSuggest(q){
 map.on('dragstart',()=>{ follow=false; interacting=true; });
 map.on('dragend',()=>{ interacting=false; });
 map.on('zoomstart',()=>{ interacting=true; }); map.on('zoomend',()=>{ interacting=false; });
-$('recenter').onclick=()=>{ follow=true; locate(); if(disp) map.easeTo({center:[disp.lon,disp.lat],bearing:disp.head,zoom:15.6,pitch:55}); };
+$('recenter').onclick=()=>{ follow=true; locate(); if(disp) map.easeTo({center:[disp.lon,disp.lat],bearing:disp.head,zoom:15.6,pitch:0}); };
 
 // ---------- POIs (Overpass): radares + cargadores ----------
 function parseMax(v){ if(!v) return null; const m=(''+v).match(/\d+/); return m?parseInt(m[0]):null; }

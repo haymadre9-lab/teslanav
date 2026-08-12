@@ -11,7 +11,7 @@
   :root{--txt:#e7eaf0;--dim:#9aa3b2;--bd:#26303f;--ok:#39d98a;--warn:#ff5d5d;}
   *{box-sizing:border-box;} html,body{margin:0;height:100%;background:#05070d;color:var(--txt);font-family:-apple-system,Segoe UI,Roboto,system-ui,sans-serif;overflow:hidden;}
   #app{position:fixed;inset:0;}
-  #map{position:absolute;top:-22%;left:-22%;width:144%;height:144%;background:#0a0e17;transform-origin:50% 50%;will-change:transform;}
+  #map{position:absolute;top:-35%;left:-22%;width:144%;height:170%;background:#0a0e17;transform-origin:50% 50%;will-change:transform;transform:perspective(1500px) rotateX(24deg);}
   #hud{position:absolute;inset:0;display:none;background:#000;}
   #hud img{position:absolute;left:50%;top:60%;transform:translate(-50%,-50%);width:33%;}
   .leaflet-container{background:#0a0e17;}
@@ -167,7 +167,7 @@ function frame(now){
         const aheadD=(window.innerHeight*0.24)*mpp;           // adelanta el centro -> coche más abajo
         const c=moveLL(disp.lat,disp.lon,disp.head,aheadD);
         map.setView([c[0],c[1]], z, {animate:false});
-        $('map').style.transform='rotate('+(-disp.head).toFixed(1)+'deg)';   // mapa orientado al rumbo
+        $('map').style.transform='perspective(1500px) rotateX(24deg) rotate('+(-disp.head).toFixed(1)+'deg)';   // inclinación suave + rumbo
       }
     }
     $('spd').textContent=Math.round(speedKmh);

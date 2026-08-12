@@ -11,11 +11,11 @@
   :root{--txt:#e7eaf0;--dim:#9aa3b2;--bd:#26303f;--ok:#39d98a;--warn:#ff5d5d;}
   *{box-sizing:border-box;} html,body{margin:0;height:100%;background:#05070d;color:var(--txt);font-family:-apple-system,Segoe UI,Roboto,system-ui,sans-serif;overflow:hidden;}
   #app{position:fixed;inset:0;}
-  #map{position:absolute;inset:0;background:#0a0e17;}
+  #map{position:absolute;top:-22%;left:-22%;width:144%;height:144%;background:#0a0e17;transform-origin:50% 50%;will-change:transform;}
   #hud{position:absolute;inset:0;display:none;background:#000;}
   #hud img{position:absolute;left:50%;top:60%;transform:translate(-50%,-50%);width:33%;}
   .leaflet-container{background:#0a0e17;}
-  #carrot{width:26px;height:26px;transition:transform .15s linear;}
+  #carrot{width:26px;height:26px;}
   .ovl{position:absolute;z-index:500;}
   .modes{top:10px;left:10px;display:flex;gap:6px;background:rgba(16,18,24,.75);border:1px solid var(--bd);border-radius:12px;padding:5px;}
   .modes button{border:0;background:transparent;color:var(--dim);font-weight:800;padding:7px 13px;border-radius:9px;cursor:pointer;font-size:13px;}
@@ -112,8 +112,10 @@ function instrES(s){const m=s.maneuver||{},mod=m.modifier,type=m.type,name=s.nam
 const map=L.map('map',{zoomControl:false,attributionControl:false,preferCanvas:true,zoomSnap:0.5,fadeAnimation:false,inertia:true,minZoom:5,maxZoom:19});
 map.setView([43.26,-2.93],15);
 L.control.attribution({prefix:false,position:'bottomright'}).addAttribution('© TomTom').addTo(map);
-function ttTiles(style){ return L.tileLayer('https://api.tomtom.com/map/1/tile/basic/'+style+'/{z}/{x}/{y}.png?key='+TT+'&tileSize=256',{maxZoom:19,keepBuffer:2,updateWhenZooming:false,crossOrigin:true}); }
-let dayLayer=ttTiles('main').addTo(map), nightLayer=null, trafficLayer=null, mapNight=false, trafficOn=false;
+const satLayer=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,keepBuffer:2,updateWhenZooming:false,crossOrigin:true,attribution:'© Esri'});
+const streetLayer=L.tileLayer('https://api.tomtom.com/map/1/tile/basic/main/{z}/{x}/{y}.png?key='+TT+'&tileSize=256',{maxZoom:19,keepBuffer:2,updateWhenZooming:false,crossOrigin:true,attribution:'© TomTom'});
+satLayer.addTo(map);
+let baseSat=true, trafficLayer=null, trafficOn=false;
 const carIcon=L.divIcon({className:'',html:'<div id="carrot"><svg width="26" height="26" viewBox="0 0 24 24"><path d="M12 2 L20 21 L12 15.5 L4 21 Z" fill="#39d98a" stroke="#04130c" stroke-width="1"/></svg></div>',iconSize:[26,26],iconAnchor:[13,13]});
 const carMk=L.marker([43.26,-2.93],{icon:carIcon,interactive:false,keyboard:false,zIndexOffset:1000}).addTo(map);
 const chargerGroup=L.layerGroup().addTo(map);
@@ -155,12 +157,14 @@ function frame(now){
       disp.lat+=(raw.lat-disp.lat)*Math.min(1,dt*1.8); disp.lon+=(raw.lon-disp.lon)*Math.min(1,dt*1.8);
       disp.head=angLerp(disp.head,raw.head,Math.min(1,dt*3));
       carMk.setLatLng([disp.lat,disp.lon]);
-      const cr=$('carrot'); if(cr) cr.style.transform='rotate('+disp.head.toFixed(0)+'deg)';
+      const cr=$('carrot'); if(cr) cr.style.transform='rotate('+disp.head.toFixed(0)+'deg)';   // contrarrota: flecha siempre hacia arriba
       if(follow && now-lastCam>50){ lastCam=now;
-        const ch=map.getContainer().clientHeight||600;
-        const pt=map.latLngToContainerPoint([disp.lat,disp.lon]);
-        const c=map.containerPointToLatLng([pt.x, pt.y - ch*0.22]);
-        map.setView(c, map.getZoom(), {animate:false});
+        const z=map.getZoom();
+        const mpp=156543.03392*Math.cos(disp.lat*Math.PI/180)/Math.pow(2,z);
+        const aheadD=(window.innerHeight*0.24)*mpp;           // adelanta el centro -> coche más abajo
+        const c=moveLL(disp.lat,disp.lon,disp.head,aheadD);
+        map.setView([c[0],c[1]], z, {animate:false});
+        $('map').style.transform='rotate('+(-disp.head).toFixed(1)+'deg)';   // mapa orientado al rumbo
       }
     }
     $('spd').textContent=Math.round(speedKmh);
@@ -308,8 +312,9 @@ async function renderSuggest(q){ const box=$('suggest');
 
 // ===== día/noche + tráfico =====
 function bringOverlaysFront(){ if(trafficLayer)trafficLayer.bringToFront(); if(routeCasing)routeCasing.bringToFront(); if(routeLine)routeLine.bringToFront(); }
-function setMapMode(night){ if(night){ if(!nightLayer)nightLayer=ttTiles('night'); if(map.hasLayer(dayLayer))map.removeLayer(dayLayer); nightLayer.addTo(map); } else { if(nightLayer&&map.hasLayer(nightLayer))map.removeLayer(nightLayer); if(!map.hasLayer(dayLayer))dayLayer.addTo(map); } mapNight=night; $('daynight').textContent=night?'☀️':'🌙'; bringOverlaysFront(); }
-$('daynight').onclick=()=>setMapMode(!mapNight);
+function setBase(sat){ if(sat){ if(map.hasLayer(streetLayer))map.removeLayer(streetLayer); if(!map.hasLayer(satLayer))satLayer.addTo(map); } else { if(map.hasLayer(satLayer))map.removeLayer(satLayer); if(!map.hasLayer(streetLayer))streetLayer.addTo(map); } baseSat=sat; $('daynight').textContent=sat?'🗺️':'🛰️'; bringOverlaysFront(); }
+$('daynight').textContent='🗺️';
+$('daynight').onclick=()=>setBase(!baseSat);
 $('ttKey').value=localStorage.getItem('ttKey')||TT;
 $('ttSave').onclick=()=>{ localStorage.setItem('ttKey',$('ttKey').value.trim()); $('ttWrap').style.display='none'; setTraffic(true); };
 function setTraffic(on){ const key=(localStorage.getItem('ttKey')||TT).trim(); if(on&&!key){ $('ttWrap').style.display='flex'; return; }

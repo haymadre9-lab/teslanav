@@ -213,7 +213,6 @@ function frame(now){
         const aheadD=(window.innerHeight*0.24)*mpp;           // adelanta el centro -> coche más abajo
         const c=moveLL(disp.lat,disp.lon,disp.head,aheadD);
         map.setView([c[0],c[1]], z, {animate:false});
-        $('map').style.transform='perspective(1500px) rotateX(24deg) rotate('+(-disp.head).toFixed(1)+'deg)';   // inclinación suave + rumbo
       }
     }
     $('spd').textContent=Math.round(speedKmh);

@@ -23,7 +23,9 @@
   #hudchg .evrow{display:flex;align-items:center;gap:8px;background:rgba(16,18,24,.9);border:1px solid var(--bd);border-radius:11px;padding:6px 10px;font-size:13px;font-weight:700;color:var(--txt);white-space:nowrap;cursor:pointer;}
   #hudchg .evrow img{position:static;transform:none;width:20px;height:20px;filter:none;flex:0 0 auto;}
   #hudchg .evt{overflow:hidden;text-overflow:ellipsis;}
-  #hudchg .evfav{border:0;background:#1b2130;color:#ffd54a;border-radius:8px;padding:3px 8px;cursor:pointer;font-size:13px;flex:0 0 auto;}
+  #hudchg .evstar{display:none;color:#ffd54a;flex:0 0 auto;}
+  #hudchg .evrow.isfav{border-color:#ffd54a;background:rgba(58,50,14,.92);}
+  #hudchg .evrow.isfav .evstar{display:inline;}
   .mapnight{bottom:10px;right:172px;background:rgba(16,18,24,.85);border:1px solid var(--bd);color:var(--txt);border-radius:12px;padding:10px 12px;cursor:pointer;font-size:15px;}
   #map.nite{filter:brightness(.58) contrast(1.06) saturate(.85);}
   .leaflet-container{background:#0a0e17;}
@@ -137,20 +139,36 @@ function drawHudRoad(phase){
 }
 
 function updateHudCar(){ let f; if(speedKmh<8) f='park'; else { const hr=new Date().getHours(); f=(hr>=8&&hr<20)?'day':'night'; } if(f!==hudFrame){ hudFrame=f; $('hudcar').src=(f==='park'?PARK:(f==='day'?DAY:NIGHT)); $('hud').classList.toggle('nite', f==='night'); } }
+function isFav(p){ return getFavs().some(f=>Math.abs(f.lat-p.ll[0])<0.0004 && Math.abs(f.lon-p.ll[1])<0.0004); }
+let hudSig='';
 function updateHudCharger(){
   const box=$('hudchg');
-  if(!disp||!pois.length){ box.style.display='none'; return; }
+  if(!disp||!pois.length){ box.style.display='none'; hudSig=''; return; }
   const list=pois.filter(p=>p.type==='charge').map(p=>({p,d:dist([disp.lat,disp.lon],p.ll)})).sort((a,b)=>a.d-b.d).slice(0,5);
-  if(!list.length){ box.style.display='none'; return; }
-  box.innerHTML=list.map((it,i)=>{ const p=it.p; const ic=isTesla(p)?IC_TESLA:IC_EV; const lab=isTesla(p)?'Tesla':'EV';
-    const parts=[lab,fmtDist(it.d)]; if(p.kw)parts.push(p.kw+' kW'); if(p.op)parts.push(p.op);
-    return '<div class="evrow" data-i="'+i+'"><img src="'+ic+'"><span class="evt">'+parts.join(' · ')+'</span><button class="evfav" data-i="'+i+'">⭐</button></div>';
-  }).join('');
-  box.style.display='flex';
-  box.querySelectorAll('.evrow').forEach(el=>{ el.onclick=(ev)=>{ const p=list[+el.dataset.i].p;
-    if(ev.target.classList.contains('evfav')){ const def=(isTesla(p)?'Tesla':'EV')+(p.op?' '+p.op:''); const nm=prompt('Nombre del favorito:',def); if(nm) saveFav(nm, p.ll[0], p.ll[1]); ev.stopPropagation(); return; }
-    routeTo(p.ll);
-  }; });
+  if(!list.length){ box.style.display='none'; hudSig=''; return; }
+  const sig=list.map(it=>it.p.ll.join(',')).join('|');
+  if(sig!==hudSig){
+    hudSig=sig;
+    box.innerHTML=list.map((it,i)=>{ const p=it.p; const ic=isTesla(p)?IC_TESLA:IC_EV; const lab=isTesla(p)?'Tesla':'EV';
+      const info=[]; if(p.kw)info.push(p.kw+' kW'); if(p.op)info.push(p.op);
+      return '<div class="evrow" data-i="'+i+'"><img src="'+ic+'"><span class="evstar">★</span><span class="evt">'+lab+' · <span class="evd">'+fmtDist(it.d)+'</span>'+(info.length?' · '+info.join(' · '):'')+'</span></div>';
+    }).join('');
+    box.style.display='flex';
+    box.querySelectorAll('.evrow').forEach(el=>{ const p=list[+el.dataset.i].p; let tmr=null,moved=false,longed=false;
+      const start=()=>{ longed=false; moved=false; tmr=setTimeout(()=>{ longed=true; const def=(isTesla(p)?'Tesla':'EV')+(p.op?' '+p.op:''); const nm=prompt('Guardar como favorito:',def); if(nm){ saveFav(nm,p.ll[0],p.ll[1]); } },600); };
+      const cancel=()=>{ if(tmr){clearTimeout(tmr);tmr=null;} };
+      el.addEventListener('touchstart',start,{passive:true});
+      el.addEventListener('touchmove',()=>{moved=true;cancel();},{passive:true});
+      el.addEventListener('touchend',()=>{ cancel(); if(!longed&&!moved) routeTo(p.ll); });
+      el.addEventListener('mousedown',start);
+      el.addEventListener('mouseup',()=>{ cancel(); if(!longed) routeTo(p.ll); });
+      el.addEventListener('mouseleave',cancel);
+    });
+  } else {
+    const rows=box.querySelectorAll('.evrow');
+    list.forEach((it,i)=>{ const r=rows[i]; if(r){ const d=r.querySelector('.evd'); if(d)d.textContent=fmtDist(it.d); } });
+  }
+  box.querySelectorAll('.evrow').forEach((el,i)=>{ if(list[i]) el.classList.toggle('isfav', isFav(list[i].p)); });
 }
 
 // ===== helpers =====

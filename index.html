@@ -19,7 +19,7 @@
   .beam{position:absolute;bottom:0;left:50%;width:24%;height:100%;background:linear-gradient(to top, rgba(255,244,205,.7), rgba(255,244,205,.06) 62%, transparent);filter:blur(9px);transform-origin:bottom center;border-radius:45% 45% 0 0;}
   .bl{transform:translateX(-50%) rotate(-11deg);} .br{transform:translateX(-50%) rotate(11deg);}
   #hud img#hudcar{position:absolute;z-index:3;left:50%;top:60%;transform:translate(-50%,-50%);width:32%;filter:drop-shadow(0 10px 10px rgba(0,0,0,.35));}
-  #hudchg{position:absolute;z-index:6;left:10px;top:64px;display:none;flex-direction:column;align-items:flex-start;gap:5px;max-width:78vw;}
+  #hudchg{position:absolute;z-index:20;left:10px;top:64px;display:none;flex-direction:column;align-items:flex-start;gap:5px;max-width:78vw;}
   #hudchg .evrow{display:flex;align-items:center;gap:8px;background:rgba(16,18,24,.9);border:1px solid var(--bd);border-radius:11px;padding:6px 10px;font-size:13px;font-weight:700;color:var(--txt);white-space:nowrap;cursor:pointer;}
   #hudchg .evrow img{position:static;transform:none;width:20px;height:20px;filter:none;flex:0 0 auto;}
   #hudchg .evt{overflow:hidden;text-overflow:ellipsis;}
@@ -78,8 +78,8 @@
     <canvas id="hudroad"></canvas>
     <div id="beams"><div class="beam bl"></div><div class="beam br"></div></div>
     <img id="hudcar" alt="">
-    <div id="hudchg" style="display:none"></div>
   </div>
+  <div id="hudchg" style="display:none"></div>
 
   <div class="ovl modes"><button id="mMap" class="on">Mapa</button><button id="mHud">HUD</button></div>
   <div class="ovl search" id="searchBar">
@@ -154,14 +154,18 @@ function updateHudCharger(){
       return '<div class="evrow" data-i="'+i+'"><img src="'+ic+'"><span class="evstar">★</span><span class="evt">'+lab+' · <span class="evd">'+fmtDist(it.d)+'</span>'+(info.length?' · '+info.join(' · '):'')+'</span></div>';
     }).join('');
     box.style.display='flex';
-    box.querySelectorAll('.evrow').forEach(el=>{ const p=list[+el.dataset.i].p; let tmr=null,moved=false,longed=false;
-      const start=()=>{ longed=false; moved=false; tmr=setTimeout(()=>{ longed=true; const def=(isTesla(p)?'Tesla':'EV')+(p.op?' '+p.op:''); const nm=prompt('Guardar como favorito:',def); if(nm){ saveFav(nm,p.ll[0],p.ll[1]); } },600); };
+    box.querySelectorAll('.evrow').forEach(el=>{ const p=list[+el.dataset.i].p; let tmr=null,moved=false,longed=false,sx=0,sy=0;
+      const start=(e)=>{ longed=false; moved=false; const t=(e.touches&&e.touches[0])||e; sx=t.clientX||0; sy=t.clientY||0;
+        tmr=setTimeout(()=>{ longed=true; const def=(isTesla(p)?'Tesla':'EV')+(p.op?' '+p.op:''); const nm=prompt('Guardar como favorito:',def); if(nm){ saveFav(nm,p.ll[0],p.ll[1]); } },600); };
+      const move=(e)=>{ const t=(e.touches&&e.touches[0])||e; if(Math.hypot((t.clientX||0)-sx,(t.clientY||0)-sy)>12){ moved=true; if(tmr){clearTimeout(tmr);tmr=null;} } };
       const cancel=()=>{ if(tmr){clearTimeout(tmr);tmr=null;} };
+      const go=()=>{ if(routeOn&&destLL) addWaypoint(p.ll); else routeTo(p.ll); };
       el.addEventListener('touchstart',start,{passive:true});
-      el.addEventListener('touchmove',()=>{moved=true;cancel();},{passive:true});
-      el.addEventListener('touchend',()=>{ cancel(); if(!longed&&!moved) routeTo(p.ll); });
+      el.addEventListener('touchmove',move,{passive:true});
+      el.addEventListener('touchend',()=>{ cancel(); if(!longed&&!moved) go(); });
       el.addEventListener('mousedown',start);
-      el.addEventListener('mouseup',()=>{ cancel(); if(!longed) routeTo(p.ll); });
+      el.addEventListener('mousemove',move);
+      el.addEventListener('mouseup',()=>{ cancel(); if(!longed&&!moved) go(); });
       el.addEventListener('mouseleave',cancel);
     });
   } else {
@@ -252,7 +256,8 @@ function frame(now){
       if(limit){ $('limit').style.display='flex'; $('limitn').textContent=limit; $('spd').classList.toggle('over',speedKmh>limit+3); } else $('limit').style.display='none';
       updateRadar();
       if(routeOn) trackRoute();
-      if(hudOn){ updateHudCar(); updateHudCharger(); }
+      if(hudOn) updateHudCar();
+      updateHudCharger();
     }
   }catch(e){}
   requestAnimationFrame(frame);

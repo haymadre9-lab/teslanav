@@ -37,6 +37,7 @@
   .search{top:10px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:6px;background:rgba(16,18,24,.85);border:1px solid var(--bd);border-radius:12px;padding:5px;width:min(60vw,430px);}
   .searchrow{display:flex;gap:6px;} .searchrow input{flex:1;background:#0a0d13;border:1px solid var(--bd);border-radius:9px;color:var(--txt);padding:10px 12px;font-size:14px;}
   #favBtn{border:0;background:#1b2130;color:#ffd54a;border-radius:9px;padding:0 12px;cursor:pointer;font-size:16px;}
+  #homeBtn{border:0;background:#1b2130;color:#7cc4ff;border-radius:9px;padding:0 10px;cursor:pointer;font-size:16px;}
   .search button#goRoute{border:0;background:var(--ok);color:#04130c;font-weight:800;border-radius:9px;padding:0 16px;cursor:pointer;}
   .suggest{display:none;background:rgba(16,18,24,.97);border:1px solid var(--bd);border-radius:10px;max-height:44vh;overflow:auto;}
   .sug{padding:9px 11px;font-size:13px;color:var(--txt);border-top:1px solid rgba(255,255,255,.06);cursor:pointer;display:flex;justify-content:space-between;gap:8px;align-items:center;}
@@ -47,6 +48,7 @@
   .card .n.over{color:var(--warn);}
   .limit{width:74px;height:74px;border-radius:50%;background:#fff;border:9px solid #e01d1d;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.5);}
   .limit span{font-size:28px;font-weight:800;color:#111;}
+  .reroute{bottom:56px;left:50%;transform:translateX(-50%);background:#ff9a1f;color:#1a1200;border:0;border-radius:12px;padding:10px 16px;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.45);font-size:14px;}
   .trip{bottom:44px;left:10px;font-size:13px;font-weight:700;color:var(--txt);background:rgba(16,18,24,.8);border:1px solid var(--bd);border-radius:10px;padding:7px 11px;}
   .status{bottom:10px;left:10px;font-size:11px;color:var(--dim);background:rgba(16,18,24,.7);border:1px solid var(--bd);border-radius:9px;padding:6px 10px;}
   .recenter{bottom:10px;right:10px;background:rgba(16,18,24,.85);border:1px solid var(--bd);color:var(--txt);border-radius:12px;padding:10px 12px;font-weight:800;cursor:pointer;}
@@ -83,11 +85,12 @@
 
   <div class="ovl modes"><button id="mMap" class="on">Mapa</button><button id="mHud">HUD</button></div>
   <div class="ovl search" id="searchBar">
-    <div class="searchrow"><input id="dest" type="text" placeholder="¿A dónde vamos?" autocomplete="off"><button id="favBtn" title="Favoritos">⭐</button><button id="goRoute">Ir</button></div>
+    <div class="searchrow"><input id="dest" type="text" placeholder="¿A dónde vamos?" autocomplete="off"><button id="homeBtn" title="Casa (mantén pulsado para fijar)">🏠</button><button id="favBtn" title="Favoritos">⭐</button><button id="goRoute">Ir</button></div>
     <div class="suggest" id="suggest"></div>
   </div>
   <div class="ovl spd"><div class="limit" id="limit" style="display:none"><span id="limitn">--</span></div><div class="card"><div class="n" id="spd">0</div><div class="u">KM/H</div></div></div>
   <div class="ovl ttwrap" id="ttWrap"><input id="ttKey" type="text" placeholder="Clave TomTom (tráfico)" autocomplete="off"><button id="ttSave">Guardar</button></div>
+  <button class="ovl reroute" id="reroute" style="display:none"></button>
   <div class="ovl trip" id="trip" style="display:none"></div>
   <div class="ovl status" id="status">Buscando GPS…</div>
   <button class="ovl traffic" id="traffic">🚦</button>
@@ -289,7 +292,8 @@ async function fetchPois(ll){
     pois=arr; drawChargers();
   }catch(e){}
 }
-function refreshRadars(here){ const out=[]; for(const p of radarDB){ if(dist(here,[p.lat,p.lon])<5000) out.push({ll:[p.lat,p.lon],max:p.max,t:p.t,_al:false}); } radars=out; drawRadars(); }
+function nearRoute(ll,maxM){ if(!routeCoordsLL.length)return false; let best=1e9; for(let i=1;i<routeCoordsLL.length;i+=2){ const d=segDistM(ll,{lat:routeCoordsLL[i-1][0],lon:routeCoordsLL[i-1][1]},{lat:routeCoordsLL[i][0],lon:routeCoordsLL[i][1]}); if(d<best)best=d; if(best<maxM)return true; } return best<maxM; }
+function refreshRadars(here){ const out=[]; for(const p of radarDB){ if(dist(here,[p.lat,p.lon])>5000)continue; if(routeOn && routeCoordsLL.length && !nearRoute([p.lat,p.lon],160)) continue; out.push({ll:[p.lat,p.lon],max:p.max,t:p.t,_al:false}); } radars=out; drawRadars(); }
 function isTesla(p){ return /tesla|supercharger/i.test((p.op||'')+' '+(p.name||'')); }
 function drawChargers(){
   chargerGroup.clearLayers();
@@ -299,9 +303,10 @@ function drawChargers(){
     const mk=L.marker([p.ll[0],p.ll[1]],{icon:ic}); mk.on('click',()=>chargerPopup(p)); mk.addTo(chargerGroup);
   }
 }
+const RADAR_ICON='<svg width="26" height="26" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#e01d1d" stroke="#fff" stroke-width="1.6"/><rect x="6" y="9" width="8" height="6" rx="1" fill="#fff"/><circle cx="10" cy="12" r="1.7" fill="#e01d1d"/><path d="M14 10.3 L18 8.5 L18 15.5 L14 13.7 Z" fill="#fff"/></svg>';
 function drawRadars(){
   radarGroup.clearLayers();
-  for(const p of radars){ L.circleMarker([p.ll[0],p.ll[1]],{radius:6,color:'#fff',weight:2,fillColor:'#e01d1d',fillOpacity:1,interactive:false}).addTo(radarGroup); }
+  for(const p of radars){ const ic=L.divIcon({className:'',html:'<div style="filter:drop-shadow(0 1px 2px rgba(0,0,0,.6))">'+RADAR_ICON+'</div>',iconSize:[26,26],iconAnchor:[13,13]}); L.marker([p.ll[0],p.ll[1]],{icon:ic,interactive:false}).addTo(radarGroup); }
 }
 
 // ===== límite de vía (OSM, carretera más cercana) =====
@@ -328,14 +333,42 @@ function updateRadar(){
   $('rsmax').textContent=best.max||'⚠'; $('rsdist').textContent=fmtDist(Math.max(0,best.dist)); el.classList.add('show'); el.classList.toggle('hot',best.dist<520);
 }
 
-// ===== navegación (Nominatim + OSRM) =====
+// ===== navegación (Nominatim + TomTom routing con tráfico) =====
 let routeOn=false, steps=[], stepIdx=0, destLL=null, routeCoordsLL=[], routeProgIdx=0, offAcc=0, lastRecalc=0, lastTrim=0;
-function drawRoute(coords){ routeCoordsLL=coords.map(c=>[c[1],c[0]]); routeProgIdx=0;
-  if(routeCasing){map.removeLayer(routeCasing);} if(routeLine){map.removeLayer(routeLine);}
-  routeCasing=L.polyline(routeCoordsLL,{color:'#0a3fb0',weight:11,opacity:.5}).addTo(map);
-  routeLine=L.polyline(routeCoordsLL,{color:'#4c8dff',weight:6}).addTo(map);
+let trafficSegs=[], routeSummary=null;
+function clearRouteLayers(){ if(routeCasing){map.removeLayer(routeCasing);routeCasing=null;} if(routeLine){map.removeLayer(routeLine);routeLine=null;} trafficSegs.forEach(l=>map.removeLayer(l)); trafficSegs=[]; }
+function drawRouteTT(route){
+  const pts=[]; (route.legs||[]).forEach(l=>(l.points||[]).forEach(p=>pts.push([p.latitude,p.longitude])));
+  routeCoordsLL=pts; routeProgIdx=0; clearRouteLayers();
+  routeCasing=L.polyline(pts,{color:'#0a3fb0',weight:11,opacity:.5}).addTo(map);
+  routeLine=L.polyline(pts,{color:'#4c8dff',weight:6}).addTo(map);
+  (route.sections||[]).forEach(sec=>{ if(sec.sectionType!=='TRAFFIC')return; const a=sec.startPointIndex,b=sec.endPointIndex; if(a==null||b==null||b<=a)return;
+    const seg=pts.slice(a,b+1); if(seg.length<2)return; const mag=sec.magnitudeOfDelay||0; let col=null;
+    if(sec.simpleCategory==='ROAD_CLOSURE'||sec.effectiveSpeedInKmh===0)col='#ff2d2d'; else if(mag>=3)col='#ff2d2d'; else if(mag>=1)col='#ff9a1f';
+    if(col) trafficSegs.push(L.polyline(seg,{color:col,weight:6}).addTo(map));
+  });
 }
-function clearRoute(){ if(routeCasing){map.removeLayer(routeCasing);routeCasing=null;} if(routeLine){map.removeLayer(routeLine);routeLine=null;} routeCoordsLL=[]; }
+function ttMan(it){ const m=(it.maneuver||it.instructionType||'').toString().toUpperCase(); const rb=it.roundaboutExitNumber;
+  if(m.indexOf('ROUNDABOUT')>=0||m.indexOf('ROTARY')>=0) return {type:'roundabout',exit:rb,modifier:(m.indexOf('LEFT')>=0?'left':(m.indexOf('RIGHT')>=0?'right':'straight'))};
+  if(m.indexOf('ARRIVE')>=0)return {type:'arrive'}; if(m.indexOf('DEPART')>=0)return {type:'depart'};
+  if(m.indexOf('EXIT')>=0||m.indexOf('RAMP')>=0)return {type:'off ramp',modifier:(m.indexOf('LEFT')>=0?'left':'right')};
+  if(m.indexOf('MERGE')>=0)return {type:'merge'};
+  let mod='straight';
+  if(m.indexOf('SHARP_LEFT')>=0)mod='sharp left'; else if(m.indexOf('SHARP_RIGHT')>=0)mod='sharp right';
+  else if(m.indexOf('BEAR_LEFT')>=0||m.indexOf('KEEP_LEFT')>=0||m.indexOf('SLIGHT_LEFT')>=0)mod='slight left';
+  else if(m.indexOf('BEAR_RIGHT')>=0||m.indexOf('KEEP_RIGHT')>=0||m.indexOf('SLIGHT_RIGHT')>=0)mod='slight right';
+  else if(m.indexOf('LEFT')>=0)mod='left'; else if(m.indexOf('RIGHT')>=0)mod='right'; else if(m.indexOf('UTURN')>=0||m.indexOf('U_TURN')>=0)mod='uturn';
+  return {type:'turn',modifier:mod};
+}
+function applyRoute(route){
+  drawRouteTT(route);
+  const instr=(route.guidance&&route.guidance.instructions)||[];
+  steps=instr.map((it,i)=>{ const nx=instr[i+1]; const d=nx?Math.max(0,(nx.routeOffsetInMeters||0)-(it.routeOffsetInMeters||0)):0;
+    return {distance:d,name:it.street||'',ll:[it.point.latitude,it.point.longitude],instr:it.message||'',maneuver:ttMan(it),_min:1e9,_v:false}; });
+  if(!steps.length&&routeCoordsLL.length){ steps=[{distance:(route.summary&&route.summary.lengthInMeters)||0,name:'',ll:routeCoordsLL[0],instr:'Comienza la ruta',maneuver:{type:'depart'},_min:1e9,_v:false},{distance:0,name:'',ll:routeCoordsLL[routeCoordsLL.length-1],instr:'Has llegado a tu destino',maneuver:{type:'arrive'},_min:1e9,_v:false}]; }
+  stepIdx=0; routeSummary=route.summary||null; renderStep(true);
+}
+function clearRoute(){ clearRouteLayers(); routeCoordsLL=[]; const rr=$('reroute'); if(rr)rr.style.display='none'; }
 function trimRoute(){ if(!routeCoordsLL.length||!disp)return; const nowp=performance.now(); if(nowp-lastTrim<1200)return; lastTrim=nowp;
   let bi=routeProgIdx,bd=1e9; const end=Math.min(routeCoordsLL.length,routeProgIdx+80);
   for(let i=routeProgIdx;i<end;i++){ const dd=dist([disp.lat,disp.lon],routeCoordsLL[i]); if(dd<bd){bd=dd;bi=i;} }
@@ -343,13 +376,17 @@ function trimRoute(){ if(!routeCoordsLL.length||!disp)return; const nowp=perform
 }
 async function geocode(q){ try{ const r=await fetch('https://nominatim.openstreetmap.org/search?q='+encodeURIComponent(q)+'&format=json&limit=1&countrycodes=es&accept-language=es'); const j=await r.json(); if(j&&j.length)return [parseFloat(j[0].lat),parseFloat(j[0].lon)]; }catch(e){} return null; }
 async function buildRoute(pts){ if(pts.length<2)return;
-  try{ const coords=pts.map(p=>p[1]+','+p[0]).join(';');
-    const r=await fetch('https://router.project-osrm.org/route/v1/driving/'+coords+'?overview=full&geometries=geojson&steps=true'); const j=await r.json();
+  try{ const locs=pts.map(p=>p[0]+','+p[1]).join(':');
+    const url='https://api.tomtom.com/routing/1/calculateRoute/'+locs+'/json?key='+TT+'&traffic=true&travelMode=car&routeType=fastest&sectionType=traffic&computeTravelTimeFor=all&maxAlternatives=2&instructionsType=text&language=es-ES';
+    const r=await fetch(url); const j=await r.json();
     if(!j.routes||!j.routes.length){ $('status').textContent='Sin ruta'; return; }
-    const rt=j.routes[0]; drawRoute(rt.geometry.coordinates);
-    steps=rt.legs.flatMap(l=>l.steps).map(s=>({distance:s.distance,name:s.name,maneuver:s.maneuver,ll:[s.maneuver.location[1],s.maneuver.location[0]],instr:instrES(s),_min:1e9,_v:false}));
-    stepIdx=0; destLL=pts[pts.length-1]; routeOn=true; offAcc=0;
-    $('searchBar').style.display='none'; $('navbanner').style.display='flex'; hideSuggest(); renderStep(true);
+    destLL=pts[pts.length-1]; routeOn=true; offAcc=0;
+    const routes=j.routes; applyRoute(routes[0]);
+    let bestAlt=null; for(let i=1;i<routes.length;i++){ if(!bestAlt||routes[i].summary.travelTimeInSeconds<bestAlt.summary.travelTimeInSeconds)bestAlt=routes[i]; }
+    const rr=$('reroute');
+    if(bestAlt && (routes[0].summary.travelTimeInSeconds - bestAlt.summary.travelTimeInSeconds)>60){ const save=Math.round((routes[0].summary.travelTimeInSeconds-bestAlt.summary.travelTimeInSeconds)/60); rr._alt=bestAlt; rr.textContent='⚠ Evitar atasco · −'+save+' min'; rr.style.display='block'; }
+    else { rr.style.display='none'; rr._alt=null; }
+    $('searchBar').style.display='none'; $('navbanner').style.display='flex'; hideSuggest();
   }catch(e){ $('status').textContent='Error de ruta'; }
 }
 async function routeTo(dest){ if(!raw){ $('status').textContent='Sin GPS todavía'; return; } buildRoute([[raw.lat,raw.lon],dest]); }
@@ -401,8 +438,17 @@ $('dest').addEventListener('input',()=>{ const q=$('dest').value.trim(); clearTi
 $('dest').addEventListener('focus',()=>renderSuggest($('dest').value.trim()));
 $('dest').addEventListener('keydown',e=>{ if(e.key==='Enter')$('goRoute').click(); });
 $('favBtn').onclick=()=>{ $('dest').value=''; renderSuggest(''); };
+function getHome(){ try{return JSON.parse(localStorage.getItem('home')||'null');}catch(e){return null;} }
+(function(){ const b=$('homeBtn'); let tmr=null,longed=false;
+  const doHome=()=>{ const h=getHome(); if(h) routeTo([h.lat,h.lon]); else $('status').textContent='Mantén pulsado 🏠 para fijar tu casa'; };
+  const start=()=>{ longed=false; tmr=setTimeout(async ()=>{ longed=true; const q=prompt('Fijar CASA — dirección (vacío = ubicación actual):',''); if(q===null)return; let ll=null; if(q.trim()){ $('status').textContent='Buscando…'; ll=await geocode(q.trim()); } else if(raw){ ll=[raw.lat,raw.lon]; } if(ll){ localStorage.setItem('home',JSON.stringify({lat:ll[0],lon:ll[1]})); $('status').textContent='🏠 Casa fijada'; } else $('status').textContent='No se pudo fijar la casa'; },600); };
+  const cancel=()=>{ if(tmr){clearTimeout(tmr);tmr=null;} };
+  b.addEventListener('touchstart',start,{passive:true}); b.addEventListener('touchmove',cancel,{passive:true}); b.addEventListener('touchend',()=>{ cancel(); if(!longed) doHome(); });
+  b.addEventListener('mousedown',start); b.addEventListener('mouseup',()=>{ cancel(); if(!longed) doHome(); }); b.addEventListener('mouseleave',cancel);
+})();
 $('goRoute').onclick=async ()=>{ const q=$('dest').value.trim(); if(!q)return; $('goRoute').textContent='…'; const d=await geocode(q); $('goRoute').textContent='Ir'; if(!d){ $('status').textContent='Destino no encontrado'; return; } routeTo(d); };
 $('navx').onclick=endRoute;
+$('reroute').onclick=()=>{ const a=$('reroute')._alt; if(a){ applyRoute(a); $('reroute').style.display='none'; speak('Cambiando a la ruta más rápida'); } };
 async function renderSuggest(q){ const box=$('suggest');
   if(!q){ const favs=getFavs(); if(!favs.length){ box.innerHTML='<div class="sug"><span class="t">Sin favoritos aún</span></div>'; box.style.display='block'; return; }
     box.innerHTML=favs.map((f,i)=>'<div class="sug" data-fav="'+i+'"><span class="t">⭐ '+f.name+'</span><span class="sugx" data-ren="'+i+'">✏️</span><span class="sugx" data-del="'+i+'">✕</span></div>').join(''); box.style.display='block';

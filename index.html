@@ -37,6 +37,8 @@
   .search{top:10px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:6px;background:rgba(16,18,24,.85);border:1px solid var(--bd);border-radius:12px;padding:5px;width:min(60vw,430px);}
   .searchrow{display:flex;gap:6px;} .searchrow input{flex:1;background:#0a0d13;border:1px solid var(--bd);border-radius:9px;color:var(--txt);padding:10px 12px;font-size:14px;}
   #favBtn{border:0;background:#1b2130;color:#ffd54a;border-radius:9px;padding:0 12px;cursor:pointer;font-size:16px;}
+  #mic{border:0;background:#1b2130;color:#e7eaf0;border-radius:9px;padding:0 11px;cursor:pointer;font-size:16px;}
+  #mic.on{background:#3a1616;color:#ff6b6b;}
   #homeBtn{border:0;background:#1b2130;color:#7cc4ff;border-radius:9px;padding:0 13px;cursor:pointer;font-size:21px;}
   .search button#goRoute{border:0;background:var(--ok);color:#04130c;font-weight:800;border-radius:9px;padding:0 16px;cursor:pointer;}
   .suggest{display:none;background:rgba(16,18,24,.97);border:1px solid var(--bd);border-radius:10px;max-height:44vh;overflow:auto;}
@@ -51,9 +53,28 @@
   .reroute{bottom:56px;left:50%;transform:translateX(-50%);background:#ff9a1f;color:#1a1200;border:0;border-radius:12px;padding:10px 16px;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.45);font-size:14px;}
   .trip{bottom:44px;left:10px;font-size:13px;font-weight:700;color:var(--txt);background:rgba(16,18,24,.8);border:1px solid var(--bd);border-radius:10px;padding:7px 11px;}
   .status{bottom:10px;left:10px;font-size:11px;color:var(--dim);background:rgba(16,18,24,.7);border:1px solid var(--bd);border-radius:9px;padding:6px 10px;}
+  .rain{bottom:64px;right:10px;background:rgba(16,18,24,.85);border:1px solid var(--bd);color:var(--txt);border-radius:12px;padding:10px 12px;cursor:pointer;font-size:15px;}
+  .rain.on{background:#0e2740;color:#7cc4ff;border-color:#7cc4ff;}
+  .battery{bottom:64px;right:64px;background:rgba(16,18,24,.85);border:1px solid var(--bd);color:var(--txt);border-radius:12px;padding:10px 12px;cursor:pointer;font-size:15px;}
+  .battery.on{background:#173a24;color:#39d98a;border-color:#39d98a;}
+  #plan{position:absolute;top:120px;right:10px;z-index:20;max-width:58vw;background:rgba(14,16,22,.92);border:1px solid var(--bd);border-radius:12px;padding:8px 11px;display:none;}
+  #plan .ptitle{font-weight:800;color:var(--txt);margin-bottom:4px;font-size:12px;}
+  #plan .prow{color:var(--dim);padding:2px 0;font-size:12px;} #plan .prow.rec{color:#39d98a;font-weight:800;}
+  #plan .pwarn{color:#ff9a1f;margin-top:3px;font-size:11px;}
   .sound{bottom:10px;right:280px;background:rgba(16,18,24,.85);border:1px solid var(--bd);color:var(--txt);border-radius:12px;padding:10px 12px;cursor:pointer;font-size:15px;}
   .sound.on{background:#173a24;color:#39d98a;border-color:#39d98a;}
-  .refresh{bottom:10px;right:226px;background:rgba(16,18,24,.85);border:1px solid var(--bd);color:var(--txt);border-radius:12px;padding:10px 12px;cursor:pointer;font-size:15px;}
+  .gear{bottom:10px;right:172px;background:rgba(16,18,24,.85);border:1px solid var(--bd);color:var(--txt);border-radius:12px;padding:10px 12px;cursor:pointer;font-size:15px;}
+  #settings{position:absolute;top:0;right:0;width:min(320px,82vw);height:100%;background:rgba(10,12,18,.98);border-left:1px solid var(--bd);z-index:1000;transform:translateX(100%);transition:transform .25s;padding:14px;overflow-y:auto;}
+  #settings.open{transform:translateX(0);}
+  .shead{display:flex;justify-content:space-between;align-items:center;font-weight:800;font-size:16px;margin-bottom:12px;color:var(--txt);}
+  .shead button{background:none;border:0;color:var(--txt);font-size:20px;cursor:pointer;}
+  .sgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;}
+  .setbtn{background:#1b2130;border:1px solid var(--bd);color:var(--txt);border-radius:10px;padding:11px 9px;cursor:pointer;font-size:13px;font-weight:700;text-align:left;}
+  .setbtn.on{background:#173a24;color:#39d98a;border-color:#39d98a;}
+  .srow{margin-bottom:12px;} .srow span{font-size:12px;color:var(--dim);display:block;margin-bottom:6px;}
+  .segs{display:flex;gap:6px;} .seg{flex:1;background:#1b2130;border:1px solid var(--bd);color:var(--txt);border-radius:9px;padding:9px 4px;cursor:pointer;font-weight:700;font-size:12px;}
+  .seg.on{background:#173a24;color:#39d98a;border-color:#39d98a;}
+  .refresh{bottom:10px;right:118px;background:rgba(16,18,24,.85);border:1px solid var(--bd);color:var(--txt);border-radius:12px;padding:10px 12px;cursor:pointer;font-size:15px;}
   .recenter{bottom:10px;right:10px;background:rgba(16,18,24,.85);border:1px solid var(--bd);color:var(--txt);border-radius:12px;padding:10px 12px;font-weight:800;cursor:pointer;}
   .daynight{bottom:10px;right:64px;background:rgba(16,18,24,.85);border:1px solid var(--bd);color:var(--txt);border-radius:12px;padding:10px 12px;cursor:pointer;font-size:15px;}
   .traffic{bottom:10px;right:118px;background:rgba(16,18,24,.85);border:1px solid var(--bd);color:var(--txt);border-radius:12px;padding:10px 12px;cursor:pointer;font-size:15px;}
@@ -89,10 +110,11 @@
     <img id="hudcar" alt="">
   </div>
   <div id="hudchg" style="display:none"></div>
+  <div id="plan"></div>
 
   <div class="ovl modes"><button id="mMap" class="on">Mapa</button><button id="mHud">HUD</button></div>
   <div class="ovl search" id="searchBar">
-    <div class="searchrow"><button id="homeBtn" title="Casa (mantén pulsado para fijar)">🏠</button><input id="dest" type="text" placeholder="¿A dónde vamos?" autocomplete="off"><button id="favBtn" title="Favoritos">⭐</button><button id="goRoute">Ir</button></div>
+    <div class="searchrow"><button id="homeBtn" title="Casa (mantén pulsado para fijar)">🏠</button><input id="dest" type="text" placeholder="¿A dónde vamos?" autocomplete="off"><button id="mic" title="Buscar por voz">🎤</button><button id="favBtn" title="Favoritos">⭐</button><button id="goRoute">Ir</button></div>
     <div class="suggest" id="suggest"></div>
   </div>
   <div class="ovl spd"><div class="limit" id="limit" style="display:none"><span id="limitn">--</span></div><div class="card"><div class="n" id="spd">0</div><div class="u">KM/H</div></div></div>
@@ -100,12 +122,29 @@
   <button class="ovl reroute" id="reroute" style="display:none"></button>
   <div class="ovl trip" id="trip" style="display:none"></div>
   <div class="ovl status" id="status">Buscando GPS…</div>
-  <button class="ovl sound" id="sound" title="Activar sonido">🔇</button>
-  <button class="ovl traffic" id="traffic">🚦</button>
   <button class="ovl daynight" id="daynight">🌙</button>
-  <button class="ovl mapnight" id="mapnight">🌙</button>
   <button class="ovl refresh" id="refresh" title="Actualizar mapa">🔄</button>
+  <button class="ovl gear" id="gear" title="Ajustes">⚙️</button>
   <button class="ovl recenter" id="recenter">🎯</button>
+  <div id="settings">
+    <div class="shead"><span>Ajustes</span><button id="setClose">✕</button></div>
+    <div class="sgrid">
+      <button class="setbtn" id="mapnight">🌙 Noche</button>
+      <button class="setbtn" id="sound">🔇 Sonido</button>
+      <button class="setbtn" id="rain">🌧️ Lluvia</button>
+      <button class="setbtn" id="traffic">🚦 Tráfico</button>
+      <button class="setbtn on" id="setTilt">📐 Inclinación</button>
+      <button class="setbtn on" id="setRadar">📷 Radares</button>
+      <button class="setbtn on" id="setChargers">⚡ Cargadores</button>
+      <button class="setbtn on" id="setEvList">📋 Lista EV</button>
+      <button class="setbtn" id="avoidTolls">🚫 Peajes</button>
+      <button class="setbtn" id="battery">🔋 Batería</button>
+    </div>
+    <div class="srow"><span>Potencia mínima de cargadores</span>
+      <div class="segs"><button class="seg on" data-kw="0">Todos</button><button class="seg" data-kw="50">50+ kW</button><button class="seg" data-kw="150">150+ kW</button></div>
+    </div>
+    <div class="srow"><span>Búsqueda por voz: usa el 🎤 de la barra de búsqueda</span></div>
+  </div>
 
   <div class="ovl navstack" id="navstack">
     <div class="navbanner" id="navbanner">
@@ -156,8 +195,8 @@ function isFav(p){ return getFavs().some(f=>Math.abs(f.lat-p.ll[0])<0.0004 && Ma
 let hudSig='';
 function updateHudCharger(){
   const box=$('hudchg');
-  if(!disp||!pois.length){ box.style.display='none'; hudSig=''; return; }
-  const list=pois.filter(p=>p.type==='charge').map(p=>({p,d:dist([disp.lat,disp.lon],p.ll)})).sort((a,b)=>a.d-b.d).slice(0,5);
+  if(!disp||!pois.length||evListHidden||!showChargers){ box.style.display='none'; hudSig=''; return; }
+  const list=pois.filter(p=>p.type==='charge'&&(!minKw||(p.kw||0)>=minKw)).map(p=>({p,d:dist([disp.lat,disp.lon],p.ll)})).sort((a,b)=>a.d-b.d).slice(0,5);
   if(!list.length){ box.style.display='none'; hudSig=''; return; }
   const sig=list.map(it=>it.p.ll.join(',')).join('|');
   if(sig!==hudSig){
@@ -207,11 +246,12 @@ function instrES(s){const m=s.maneuver||{},mod=m.modifier,type=m.type,name=s.nam
 const map=L.map('map',{zoomControl:false,attributionControl:false,preferCanvas:true,zoomSnap:0.5,fadeAnimation:false,inertia:true,minZoom:5,maxZoom:19});
 map.setView([43.26,-2.93],16);
 L.control.attribution({prefix:false,position:'bottomright'}).addAttribution('© TomTom').addTo(map);
-const satLayer=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,keepBuffer:4,updateWhenZooming:false,crossOrigin:true,attribution:'© Esri'});
-const streetDay=L.tileLayer('https://api.tomtom.com/map/1/tile/basic/main/{z}/{x}/{y}.png?key='+TT+'&tileSize=256',{maxZoom:19,keepBuffer:4,updateWhenZooming:false,crossOrigin:true,attribution:'© TomTom'});
-const streetNight=L.tileLayer('https://api.tomtom.com/map/1/tile/basic/night/{z}/{x}/{y}.png?key='+TT+'&tileSize=256',{maxZoom:19,keepBuffer:4,updateWhenZooming:false,crossOrigin:true,attribution:'© TomTom'});
+const satLayer=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,keepBuffer:6,updateWhenZooming:false,crossOrigin:true,attribution:'© Esri'});
+const streetDay=L.tileLayer('https://api.tomtom.com/map/1/tile/basic/main/{z}/{x}/{y}.png?key='+TT+'&tileSize=256',{maxZoom:19,keepBuffer:6,updateWhenZooming:false,crossOrigin:true,attribution:'© TomTom'});
+const streetNight=L.tileLayer('https://api.tomtom.com/map/1/tile/basic/night/{z}/{x}/{y}.png?key='+TT+'&tileSize=256',{maxZoom:19,keepBuffer:6,updateWhenZooming:false,crossOrigin:true,attribution:'© TomTom'});
 satLayer.addTo(map);
 let baseSat=true, mapNite=false, curBase=satLayer, trafficLayer=null, trafficOn=false;
+let tilt=true, minKw=0, showRadars=true, showChargers=true, evListHidden=false, avoidTolls=false;
 const carIcon=L.divIcon({className:'',html:'<div id="carrot"><svg width="38" height="38" viewBox="0 0 24 24"><path d="M12 2 L20 21 L12 15.5 L4 21 Z" fill="#ff2d2d" stroke="#fff" stroke-width="1.3"/></svg></div>',iconSize:[38,38],iconAnchor:[19,19]});
 const carMk=L.marker([43.26,-2.93],{icon:carIcon,interactive:false,keyboard:false,zIndexOffset:1000}).addTo(map);
 const chargerGroup=L.layerGroup().addTo(map);
@@ -260,7 +300,7 @@ function frame(now){
         const aheadD=(window.innerHeight*0.24)*mpp;           // adelanta el centro -> coche más abajo
         const c=moveLL(disp.lat,disp.lon,disp.head,aheadD);
         map.setView([c[0],c[1]], z, {animate:false});
-        $('map').style.transform='perspective(1500px) rotateX(24deg) rotate('+(-disp.head).toFixed(1)+'deg)';
+        $('map').style.transform='perspective(1500px) rotateX('+(tilt?24:0)+'deg) rotate('+(-disp.head).toFixed(1)+'deg)';
       }
     }
     $('spd').textContent=Math.round(speedKmh);
@@ -276,12 +316,57 @@ function frame(now){
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-map.on('dragstart',()=>{follow=false;interacting=true; $('map').style.transform='perspective(1500px) rotateX(24deg)'; const cr=$('carrot'); if(cr) cr.style.transform='rotate(0deg)';});
+map.on('dragstart',()=>{follow=false;interacting=true; $('map').style.transform='perspective(1500px) rotateX('+(tilt?24:0)+'deg)'; const cr=$('carrot'); if(cr) cr.style.transform='rotate(0deg)';});
 map.on('dragend',()=>{interacting=false;});
 map.on('zoomstart',()=>{interacting=true;}); map.on('zoomend',()=>{interacting=false;});
 function redrawTiles(){ try{ if(curBase)curBase.redraw(); if(trafficLayer&&map.hasLayer(trafficLayer))trafficLayer.redraw(); $('status').textContent='Mapa actualizado'; }catch(e){} }
 $('refresh').onclick=redrawTiles;
-$('sound').onclick=()=>{ initAudio(); beep(880,0.12,0.16); setTimeout(()=>beep(1175,0.16,0.16),150); try{const u=new SpeechSynthesisUtterance('Sonido activado');u.lang='es-ES';if(voz)u.voice=voz;speechSynthesis.speak(u);}catch(e){} $('sound').classList.add('on'); $('sound').textContent='🔊'; $('status').textContent='🔊 Sonido activado'; };
+$('gear').onclick=()=>$('settings').classList.toggle('open');
+$('setClose').onclick=()=>$('settings').classList.remove('open');
+$('setTilt').onclick=()=>{ tilt=!tilt; $('setTilt').classList.toggle('on',tilt); $('map').style.transform='perspective(1500px) rotateX('+(tilt?24:0)+'deg)'; };
+$('setRadar').onclick=()=>{ showRadars=!showRadars; $('setRadar').classList.toggle('on',showRadars); if(!showRadars){radarGroup.clearLayers(); $('radarsign').classList.remove('show','hot');} else drawRadars(); };
+$('setChargers').onclick=()=>{ showChargers=!showChargers; $('setChargers').classList.toggle('on',showChargers); if(!showChargers)chargerGroup.clearLayers(); else drawChargers(); updateHudCharger(); };
+$('setEvList').onclick=()=>{ evListHidden=!evListHidden; $('setEvList').classList.toggle('on',!evListHidden); updateHudCharger(); };
+$('avoidTolls').onclick=()=>{ avoidTolls=!avoidTolls; $('avoidTolls').classList.toggle('on',avoidTolls); if(routeOn&&destLL) routeTo(destLL); };
+document.querySelectorAll('#settings .seg').forEach(b=>{ b.onclick=()=>{ minKw=+b.dataset.kw; document.querySelectorAll('#settings .seg').forEach(x=>x.classList.toggle('on',x===b)); drawChargers(); updateHudCharger(); }; });
+// refresco periódico de teselas (recupera negros) sin tocar la ruta
+setInterval(()=>{ try{ if(curBase&&!interacting)curBase.redraw(); }catch(e){} }, 18000);
+// ---------- capa de lluvia (RainViewer) ----------
+let rainLayer=null, rainOn=false, rainHost='', rainPath='';
+async function loadRainTs(){ try{ const r=await fetch('https://api.rainviewer.com/public/weather-maps.json'); const j=await r.json(); const past=(j.radar&&j.radar.past)||[]; const last=past[past.length-1]; if(last){ rainHost=j.host; rainPath=last.path; return true; } }catch(e){} return false; }
+function rainUrl(){ return rainHost+rainPath+'/256/{z}/{x}/{y}/2/1_1.png'; }
+$('rain').onclick=async ()=>{ if(rainOn){ if(rainLayer)map.removeLayer(rainLayer); rainOn=false; $('rain').classList.remove('on'); return; }
+  const ok=await loadRainTs(); if(!ok){ $('status').textContent='Lluvia no disponible'; return; }
+  if(rainLayer)map.removeLayer(rainLayer); rainLayer=L.tileLayer(rainUrl(),{opacity:0.55,zIndex:250}); rainLayer.addTo(map); rainOn=true; $('rain').classList.add('on'); };
+setInterval(async ()=>{ if(rainOn){ const ok=await loadRainTs(); if(ok&&rainLayer)rainLayer.setUrl(rainUrl()); } }, 300000);
+// ---------- planificador de carga en ruta ----------
+const planGroup=L.layerGroup().addTo(map);
+let routeChargers=[], batteryPct=null, rangeKm=400;
+function cumDist(c){ const cum=[0]; let d=0; for(let i=1;i<c.length;i++){ d+=dist(c[i-1],c[i]); cum.push(d);} return cum; }
+function distAlong(ll,c,cum){ let bi=0,bd=1e9; for(let i=0;i<c.length;i++){ const dd=dist(ll,c[i]); if(dd<bd){bd=dd;bi=i;} } return cum[bi]||0; }
+async function planCharge(){ planGroup.clearLayers(); routeChargers=[]; if(routeCoordsLL.length<2){ $('plan').style.display='none'; return; }
+  const cum=cumDist(routeCoordsLL); const samples=[]; let target=0;
+  for(let i=0;i<routeCoordsLL.length;i++){ if(cum[i]>=target){ samples.push(routeCoordsLL[i]); target+=35000; } }
+  samples.push(routeCoordsLL[routeCoordsLL.length-1]);
+  const seen=new Set(), found=[];
+  for(const sp of samples){ try{ const url='https://api.openchargemap.io/v3/poi/?output=json&latitude='+sp[0]+'&longitude='+sp[1]+'&distance=20&distanceunit=KM&maxresults=25&compact=true&verbose=false&minpowerkw=50&key='+OCM_KEY;
+    const r=await fetch(url); if(!r.ok)continue; const j=await r.json();
+    for(const p of (j||[])){ const ai=p.AddressInfo; if(!ai)continue; if(seen.has(p.ID))continue; const ll=[ai.Latitude,ai.Longitude]; if(!nearRoute(ll,3500))continue; seen.add(p.ID);
+      let kw=0; for(const c of (p.Connections||[])) if(c.PowerKW&&c.PowerKW>kw)kw=c.PowerKW;
+      found.push({ll,kw:Math.round(kw),op:(p.OperatorInfo&&p.OperatorInfo.Title)||'',name:ai.Title||'',along:distAlong(ll,routeCoordsLL,cum)}); } }catch(e){} }
+  found.sort((a,b)=>a.along-b.along); routeChargers=found;
+  found.forEach(c=>{ const ic=L.divIcon({className:'',html:'<div style="filter:drop-shadow(0 1px 2px #000)"><svg width="26" height="26" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#0a3fb0" stroke="#fff" stroke-width="1.6"/><path d="M13 3 L6 13 h4 l-1 8 7-10 h-4 z" fill="#ffd54a"/></svg></div>',iconSize:[26,26],iconAnchor:[13,13]}); const mk=L.marker(c.ll,{icon:ic}); mk.on('click',()=>{ if(routeOn&&destLL) addWaypoint(c.ll); else routeTo(c.ll); }); mk.addTo(planGroup); });
+  showChargePlan();
+}
+function showChargePlan(){ const box=$('plan'); if(!routeChargers.length){ box.style.display='none'; return; }
+  let rec=null; if(batteryPct!=null){ const reach=batteryPct/100*rangeKm*1000*0.85; for(const c of routeChargers){ if(c.along<=reach) rec=c; } }
+  const rows=routeChargers.slice(0,6).map(c=>{ const km=(c.along/1000).toFixed(0); const isr=rec&&c===rec; return '<div class="prow'+(isr?' rec':'')+'">'+(isr?'⚡ ':'')+(c.op||'EV')+' · '+c.kw+' kW · km '+km+'</div>'; }).join('');
+  box.innerHTML='<div class="ptitle">Carga en ruta ('+routeChargers.length+')'+(batteryPct!=null?' · '+batteryPct+'%':'')+'</div>'+rows+((batteryPct!=null&&!rec)?'<div class="pwarn">Ninguno dentro de tu alcance</div>':'');
+  box.style.display='block'; }
+$('battery').onclick=()=>{ const b=prompt('Batería actual (%) — vacío para quitar:', batteryPct!=null?batteryPct:''); if(b===null)return;
+  if(b.trim()===''){ batteryPct=null; } else { const n=parseInt(b,10); if(!isNaN(n)){ batteryPct=Math.max(0,Math.min(100,n)); const rg=prompt('Autonomía a full (km):', rangeKm); if(rg){ const rn=parseInt(rg,10); if(!isNaN(rn))rangeKm=rn; } } }
+  $('battery').classList.toggle('on', batteryPct!=null); showChargePlan(); };
+$('sound').onclick=()=>{ initAudio(); beep(880,0.12,0.16); setTimeout(()=>beep(1175,0.16,0.16),150); try{const u=new SpeechSynthesisUtterance('Sonido activado');u.lang='es-ES';if(voz)u.voice=voz;speechSynthesis.speak(u);}catch(e){} $('sound').classList.add('on'); $('sound').textContent='🔊 Sonido'; $('status').textContent='🔊 Sonido activado'; };
 let tileErrTmr=null;
 function onTileErr(){ if(tileErrTmr)return; tileErrTmr=setTimeout(()=>{ tileErrTmr=null; try{ if(curBase)curBase.redraw(); }catch(e){} },2500); }
 [satLayer,streetDay,streetNight].forEach(l=>l.on('tileerror',onTileErr));
@@ -312,8 +397,8 @@ function nearRoute(ll,maxM){ if(!routeCoordsLL.length)return false; let best=1e9
 function refreshRadars(here){ const out=[]; for(const p of radarDB){ if(dist(here,[p.lat,p.lon])>5000)continue; if(routeOn && routeCoordsLL.length && !nearRoute([p.lat,p.lon],160)) continue; out.push({ll:[p.lat,p.lon],max:p.max,t:p.t,_al:false}); } radars=out; drawRadars(); }
 function isTesla(p){ return /tesla|supercharger/i.test((p.op||'')+' '+(p.name||'')); }
 function drawChargers(){
-  chargerGroup.clearLayers();
-  for(const p of pois){ if(p.type!=='charge')continue;
+  chargerGroup.clearLayers(); if(!showChargers)return;
+  for(const p of pois){ if(p.type!=='charge')continue; if(minKw&&(p.kw||0)<minKw)continue;
     const src=isTesla(p)?IC_TESLA:IC_EV; const sz=isTesla(p)?30:28;
     const ic=L.divIcon({className:'',html:'<img src="'+src+'" style="width:'+sz+'px;height:'+sz+'px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))">',iconSize:[sz,sz],iconAnchor:[sz/2,sz/2]});
     const mk=L.marker([p.ll[0],p.ll[1]],{icon:ic}); mk.on('click',()=>chargerPopup(p)); mk.addTo(chargerGroup);
@@ -321,7 +406,7 @@ function drawChargers(){
 }
 const RADAR_ICON='<svg width="26" height="26" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#e01d1d" stroke="#fff" stroke-width="1.6"/><rect x="6" y="9" width="8" height="6" rx="1" fill="#fff"/><circle cx="10" cy="12" r="1.7" fill="#e01d1d"/><path d="M14 10.3 L18 8.5 L18 15.5 L14 13.7 Z" fill="#fff"/></svg>';
 function drawRadars(){
-  radarGroup.clearLayers();
+  radarGroup.clearLayers(); if(!showRadars)return;
   for(const p of radars){ const ic=L.divIcon({className:'',html:'<div style="filter:drop-shadow(0 1px 2px rgba(0,0,0,.6))">'+RADAR_ICON+'</div>',iconSize:[26,26],iconAnchor:[13,13]}); L.marker([p.ll[0],p.ll[1]],{icon:ic,interactive:false}).addTo(radarGroup); }
 }
 
@@ -350,7 +435,7 @@ function firstGesture(){ initAudio(); }
 document.addEventListener('pointerdown',firstGesture,{once:true});
 document.addEventListener('touchstart',firstGesture,{once:true,passive:true});
 function updateRadar(){
-  if(!disp)return; let best=null;
+  if(!disp||!showRadars){$('radarsign').classList.remove('show','hot');return;} let best=null;
   for(const p of radars){ p.dist=dist([disp.lat,disp.lon],p.ll); const ah=Math.abs(((bearing([disp.lat,disp.lon],p.ll)-disp.head+540)%360)-180)<95; if(!ah)continue;
     if(p.dist<800&&(!best||p.dist<best.dist))best=p; if(p.dist<520&&!p._al){p._al=true;radarBeep();speak('A '+fmtDist(p.dist)+', radar'+(p.max?' a '+p.max:''));} if(p.dist>700)p._al=false; }
   const el=$('radarsign'); if(!best){el.classList.remove('show','hot');return;}
@@ -421,11 +506,11 @@ function lanesHTML(lanes){ return '<div class="lanerow">'+lanes.map(l=>laneArrow
 async function buildRoute(pts){ if(pts.length<2)return;
   fetchLanes(pts);
   try{ const locs=pts.map(p=>p[0]+','+p[1]).join(':');
-    const url='https://api.tomtom.com/routing/1/calculateRoute/'+locs+'/json?key='+TT+'&traffic=true&travelMode=car&routeType=fastest&sectionType=traffic&computeTravelTimeFor=all&maxAlternatives=2&instructionsType=text&language=es-ES';
+    const url='https://api.tomtom.com/routing/1/calculateRoute/'+locs+'/json?key='+TT+'&traffic=true&travelMode=car&routeType=fastest&sectionType=traffic&computeTravelTimeFor=all&maxAlternatives=2&instructionsType=text&language=es-ES'+(avoidTolls?'&avoid=tollRoads':'');
     const r=await fetch(url); const j=await r.json();
     if(!j.routes||!j.routes.length){ $('status').textContent='Sin ruta'; return; }
     destLL=pts[pts.length-1]; routeOn=true; offAcc=0;
-    const routes=j.routes; applyRoute(routes[0]);
+    const routes=j.routes; applyRoute(routes[0]); planCharge();
     let bestAlt=null; for(let i=1;i<routes.length;i++){ if(!bestAlt||routes[i].summary.travelTimeInSeconds<bestAlt.summary.travelTimeInSeconds)bestAlt=routes[i]; }
     const rr=$('reroute');
     if(bestAlt && (routes[0].summary.travelTimeInSeconds - bestAlt.summary.travelTimeInSeconds)>60){ const save=Math.round((routes[0].summary.travelTimeInSeconds-bestAlt.summary.travelTimeInSeconds)/60); rr._alt=bestAlt; rr.textContent='⚠ Evitar atasco · −'+save+' min'; rr.style.display='block'; }
@@ -437,7 +522,7 @@ async function routeTo(dest){ if(!raw){ $('status').textContent='Sin GPS todaví
 function addWaypoint(ll){ if(!raw)return; if(routeOn&&destLL) buildRoute([[raw.lat,raw.lon],ll,destLL]); else routeTo(ll); }
 function renderStep(say){ const s=steps[stepIdx]; if(!s)return; $('arrow').innerHTML=maneuverSVG(s); $('navsub').textContent=s.name||shortHint(s); if(say)speak(s.instr);
   const nx=steps[stepIdx+1]; if(nx){ $('navnext2').style.display='flex'; $('arrow2').innerHTML=maneuverSVG(nx); $('nn2txt').textContent='Luego · '+shortHint(nx); } else $('navnext2').style.display='none'; }
-function endRoute(){ routeOn=false; steps=[]; osrmLanes=[]; hideLanes(); clearRoute(); $('navbanner').style.display='none'; $('navnext2').style.display='none'; $('trip').style.display='none'; $('searchBar').style.display='flex'; }
+function endRoute(){ routeOn=false; steps=[]; osrmLanes=[]; hideLanes(); if(typeof planGroup!=='undefined')planGroup.clearLayers(); routeChargers=[]; $('plan').style.display='none'; clearRoute(); $('navbanner').style.display='none'; $('navnext2').style.display='none'; $('trip').style.display='none'; $('searchBar').style.display='flex'; }
 function trackRoute(){ if(!routeOn||!disp||!steps.length)return; trimRoute();
   const here=[disp.lat,disp.lon]; let s=steps[stepIdx]; let d=dist(here,s.ll); s._min=Math.min(s._min,d);
   // fuera de ruta -> recalcular
@@ -483,6 +568,13 @@ $('dest').addEventListener('input',()=>{ const q=$('dest').value.trim(); clearTi
 $('dest').addEventListener('focus',()=>renderSuggest($('dest').value.trim()));
 $('dest').addEventListener('keydown',e=>{ if(e.key==='Enter')$('goRoute').click(); });
 $('favBtn').onclick=()=>{ $('dest').value=''; renderSuggest(''); };
+$('mic').onclick=()=>{ const SR=window.SpeechRecognition||window.webkitSpeechRecognition; if(!SR){ $('status').textContent='Voz no disponible en este navegador'; return; }
+  try{ const rec=new SR(); rec.lang='es-ES'; rec.interimResults=false; rec.maxAlternatives=1; $('mic').classList.add('on'); $('status').textContent='🎤 Habla…';
+    rec.onresult=(e)=>{ const t=e.results[0][0].transcript; $('dest').value=t; renderSuggest(t); $('status').textContent='🎤 '+t; };
+    rec.onerror=(e)=>{ $('status').textContent='Voz: '+(e.error||'error'); };
+    rec.onend=()=>{ $('mic').classList.remove('on'); };
+    rec.start();
+  }catch(e){ $('status').textContent='No se pudo iniciar la voz'; } };
 function getHome(){ try{return JSON.parse(localStorage.getItem('home')||'null');}catch(e){return null;} }
 (function(){ const b=$('homeBtn'); let tmr=null,longed=false;
   const doHome=()=>{ const h=getHome(); if(h) routeTo([h.lat,h.lon]); else $('status').textContent='Mantén pulsado 🏠 para fijar tu casa'; };
@@ -513,7 +605,7 @@ function applyBase(){
   if(curBase!==target){ if(curBase&&map.hasLayer(curBase))map.removeLayer(curBase); target.addTo(map); curBase=target; }
   $('map').classList.toggle('nite', baseSat && mapNite);   // satélite no tiene noche real -> filtro
   $('daynight').textContent=baseSat?'🗺️':'🛰️';
-  $('mapnight').textContent=mapNite?'☀️':'🌙';
+  {const _mn=$('mapnight'); if(_mn)_mn.classList.toggle('on',mapNite);}
   bringOverlaysFront();
 }
 function setBase(sat){ baseSat=sat; applyBase(); }
@@ -526,6 +618,25 @@ function setTraffic(on){ const key=(localStorage.getItem('ttKey')||TT).trim(); i
   if(on){ if(!trafficLayer)trafficLayer=L.tileLayer('https://api.tomtom.com/traffic/map/4/tile/flow/relative0/{z}/{x}/{y}.png?key='+key+'&tileSize=256',{opacity:0.9,zIndex:400,crossOrigin:true}); trafficLayer.addTo(map); trafficOn=true; $('traffic').classList.add('on'); bringOverlaysFront(); }
   else { if(trafficLayer&&map.hasLayer(trafficLayer))map.removeLayer(trafficLayer); trafficOn=false; $('traffic').classList.remove('on'); } }
 $('traffic').onclick=()=>setTraffic(!trafficOn);
+// ---------- recordar ajustes (localStorage) ----------
+function saveSettings(){ try{ localStorage.setItem('cfg',JSON.stringify({tilt,mapNite,baseSat,minKw,showRadars,showChargers,evListHidden,avoidTolls,batteryPct,rangeKm,trafficOn})); }catch(e){} }
+function loadSettings(){ try{ const c=JSON.parse(localStorage.getItem('cfg')||'{}');
+  if(c.tilt===false){ tilt=false; const b=$('setTilt'); if(b)b.classList.remove('on'); }
+  if(c.baseSat===false) baseSat=false;
+  if(c.mapNite) mapNite=true;
+  applyBase();
+  $('map').style.transform='perspective(1500px) rotateX('+(tilt?24:0)+'deg)';
+  if(typeof c.minKw==='number'){ minKw=c.minKw; document.querySelectorAll('#settings .seg').forEach(x=>x.classList.toggle('on',+x.dataset.kw===minKw)); }
+  if(c.showRadars===false){ showRadars=false; const b=$('setRadar'); if(b)b.classList.remove('on'); radarGroup.clearLayers(); }
+  if(c.showChargers===false){ showChargers=false; const b=$('setChargers'); if(b)b.classList.remove('on'); chargerGroup.clearLayers(); }
+  if(c.evListHidden){ evListHidden=true; const b=$('setEvList'); if(b)b.classList.remove('on'); }
+  if(c.avoidTolls){ avoidTolls=true; const b=$('avoidTolls'); if(b)b.classList.add('on'); }
+  if(typeof c.batteryPct==='number'){ batteryPct=c.batteryPct; const b=$('battery'); if(b)b.classList.add('on'); }
+  if(typeof c.rangeKm==='number') rangeKm=c.rangeKm;
+  if(c.trafficOn) setTraffic(true);
+}catch(e){} }
+loadSettings();
+addEventListener('visibilitychange',saveSettings); addEventListener('pagehide',saveSettings); setInterval(saveSettings,5000);
 setTraffic(true);
 
 // ===== modo HUD / Mapa =====

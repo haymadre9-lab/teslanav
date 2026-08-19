@@ -661,6 +661,10 @@ $('mMap').onclick=()=>{ hudOn=false; $('hud').style.display='none'; $('map').sty
 $('mHud').onclick=()=>{ hudOn=true; $('map').style.display='none'; $('hud').style.display='block'; $('mHud').classList.add('on'); $('mMap').classList.remove('on'); updateHudCar(); };
 </script>
 <script>
-if('serviceWorker' in navigator){ addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{})); }
+if('serviceWorker' in navigator){
+  addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+  let _r=false;
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{ if(_r)return; _r=true; location.reload(); });
+}
 </script>
 </body></html>

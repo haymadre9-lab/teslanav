@@ -60,12 +60,13 @@
   .ttwrap input{background:#0a0d13;border:1px solid var(--bd);border-radius:8px;color:var(--txt);padding:8px;font-size:12px;width:180px;} .ttwrap button{border:0;background:var(--ok);color:#04130c;font-weight:800;border-radius:8px;padding:0 12px;cursor:pointer;}
   .navstack{top:10px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;gap:6px;align-items:center;z-index:500;}
   .navbanner{display:none;align-items:center;gap:12px;background:rgba(16,18,24,.92);border:1px solid var(--bd);border-radius:16px;padding:8px 14px;}
-  .navbanner .arrow{width:58px;height:62px;flex:0 0 auto;} .navbanner .arrow svg{width:100%;height:100%;display:block;}
+  .navbanner .arrow{min-width:58px;height:62px;flex:0 0 auto;} .navbanner .arrow>svg{width:58px;height:62px;display:block;}
+  .lanerow{display:flex;gap:2px;align-items:center;height:62px;} .lanerow .lane{width:22px;height:40px;} .lanerow .lane svg{width:100%;height:100%;display:block;}
   .navtext{display:flex;flex-direction:column;} .navd{font-size:30px;font-weight:800;line-height:1;color:#fff;font-variant-numeric:tabular-nums;}
   .navsub{font-size:13px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:42vw;margin-top:2px;}
   .navx{background:transparent;border:0;color:var(--dim);font-size:16px;cursor:pointer;padding:0 2px;}
   .lanes{display:none;gap:3px;background:rgba(16,18,24,.92);border:1px solid var(--bd);border-radius:10px;padding:5px 8px;}
-  .lanes .lane{width:24px;height:28px;} .lanes .lane svg{width:100%;height:100%;display:block;}
+  .lanes .lane{width:30px;height:34px;} .lanes .lane svg{width:100%;height:100%;display:block;}
   .navnext2{display:none;align-self:flex-start;align-items:center;gap:8px;background:rgba(16,18,24,.8);border:1px solid var(--bd);border-radius:12px;padding:5px 12px;}
   .navnext2 .arrow2{width:30px;height:32px;flex:0 0 auto;} .navnext2 .arrow2 svg{width:100%;height:100%;display:block;} .nn2txt{font-size:12px;color:var(--dim);}
   .radarsign{position:absolute;left:0;top:0;z-index:600;display:none;flex-direction:column;align-items:center;transform-origin:bottom center;transition:transform .35s linear,left .35s linear,top .35s linear;pointer-events:none;}
@@ -399,9 +400,10 @@ async function fetchLanes(pts){ osrmLanes=[]; try{ const coords=pts.map(p=>p[1]+
 }catch(e){} }
 function laneFor(ll){ let best=null,bd=170; for(const e of osrmLanes){ const dd=dist(ll,e.ll); if(dd<bd){bd=dd;best=e;} } return best?best.lanes:null; }
 function laneArrow(dir,valid){ const rot={'left':-90,'slight left':-40,'straight':0,'slight right':40,'right':90,'sharp left':-135,'sharp right':135,'uturn':180}; const col=valid?'#39d98a':'#4a5262';
-  return '<div class="lane"><svg viewBox="0 0 24 28"><path d="M12 4 L12 24 M12 4 L6 12 M12 4 L18 12" fill="none" stroke="'+col+'" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" transform="rotate('+(rot[dir]||0)+' 12 14)"/></svg></div>'; }
+  return '<div class="lane"><svg viewBox="0 0 48 52"><path d="M24 8 L24 44 M24 8 L13 20 M24 8 L35 20" fill="none" stroke="'+col+'" stroke-width="5.6" stroke-linecap="round" stroke-linejoin="round" transform="rotate('+(rot[dir]||0)+' 24 26)"/></svg></div>'; }
 function showLanes(lanes){ if(!lanes||!lanes.length){ $('lanes').style.display='none'; return; } $('lanes').innerHTML=lanes.map(l=>laneArrow(l.dir,l.valid)).join(''); $('lanes').style.display='flex'; }
 function hideLanes(){ const e=$('lanes'); if(e)e.style.display='none'; }
+function lanesHTML(lanes){ return '<div class="lanerow">'+lanes.map(l=>laneArrow(l.dir,l.valid)).join('')+'</div>'; }
 
 async function buildRoute(pts){ if(pts.length<2)return;
   fetchLanes(pts);
@@ -429,10 +431,10 @@ function trackRoute(){ if(!routeOn||!disp||!steps.length)return; trimRoute();
   let dr=1e9; for(let i=1;i<routeCoordsLL.length;i+=2){ const dd=dist(here,routeCoordsLL[i]); if(dd<dr)dr=dd; }
   if(dr>70)offAcc++; else offAcc=0;
   if(offAcc>3 && performance.now()-lastRecalc>8000){ lastRecalc=performance.now(); offAcc=0; speak('Recalculando ruta'); routeTo(destLL); return; }
-  if(d<420){ showLanes(laneFor(s.ll)); } else hideLanes();
   if(!s._v && d<320 && d>70){ s._v=true; speak('En '+fmtDist(d)+', '+s.instr); }
   const thr=Math.max(20,(raw.spd||0)*1.4); const passed=s._min<55&&d>s._min+15;
   if((d<thr||passed)&&stepIdx<steps.length-1){ stepIdx++; renderStep(true); s=steps[stepIdx]; d=dist(here,s.ll); }
+  const lanes=(d<600)?laneFor(s.ll):null; $('arrow').innerHTML = lanes? lanesHTML(lanes) : maneuverSVG(s);
   $('navdist').textContent='En '+fmtDist(d);
   let rem=0; for(let i=stepIdx;i<steps.length;i++) rem+=steps[i].distance; const mins=Math.max(1,Math.round(rem/(Math.max(8,speedKmh)/3.6)/60)); const eta=new Date(Date.now()+mins*60000);
   const tp=$('trip'); tp.style.display='block'; tp.textContent=fmtDist(rem)+' · '+(mins>=60?Math.floor(mins/60)+' h '+(mins%60)+' min':mins+' min')+' · llegada '+eta.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});

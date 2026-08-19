@@ -51,6 +51,8 @@
   .reroute{bottom:56px;left:50%;transform:translateX(-50%);background:#ff9a1f;color:#1a1200;border:0;border-radius:12px;padding:10px 16px;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.45);font-size:14px;}
   .trip{bottom:44px;left:10px;font-size:13px;font-weight:700;color:var(--txt);background:rgba(16,18,24,.8);border:1px solid var(--bd);border-radius:10px;padding:7px 11px;}
   .status{bottom:10px;left:10px;font-size:11px;color:var(--dim);background:rgba(16,18,24,.7);border:1px solid var(--bd);border-radius:9px;padding:6px 10px;}
+  .sound{bottom:10px;right:280px;background:rgba(16,18,24,.85);border:1px solid var(--bd);color:var(--txt);border-radius:12px;padding:10px 12px;cursor:pointer;font-size:15px;}
+  .sound.on{background:#173a24;color:#39d98a;border-color:#39d98a;}
   .refresh{bottom:10px;right:226px;background:rgba(16,18,24,.85);border:1px solid var(--bd);color:var(--txt);border-radius:12px;padding:10px 12px;cursor:pointer;font-size:15px;}
   .recenter{bottom:10px;right:10px;background:rgba(16,18,24,.85);border:1px solid var(--bd);color:var(--txt);border-radius:12px;padding:10px 12px;font-weight:800;cursor:pointer;}
   .daynight{bottom:10px;right:64px;background:rgba(16,18,24,.85);border:1px solid var(--bd);color:var(--txt);border-radius:12px;padding:10px 12px;cursor:pointer;font-size:15px;}
@@ -98,6 +100,7 @@
   <button class="ovl reroute" id="reroute" style="display:none"></button>
   <div class="ovl trip" id="trip" style="display:none"></div>
   <div class="ovl status" id="status">Buscando GPS…</div>
+  <button class="ovl sound" id="sound" title="Activar sonido">🔇</button>
   <button class="ovl traffic" id="traffic">🚦</button>
   <button class="ovl daynight" id="daynight">🌙</button>
   <button class="ovl mapnight" id="mapnight">🌙</button>
@@ -278,6 +281,7 @@ map.on('dragend',()=>{interacting=false;});
 map.on('zoomstart',()=>{interacting=true;}); map.on('zoomend',()=>{interacting=false;});
 function redrawTiles(){ try{ if(curBase)curBase.redraw(); if(trafficLayer&&map.hasLayer(trafficLayer))trafficLayer.redraw(); $('status').textContent='Mapa actualizado'; }catch(e){} }
 $('refresh').onclick=redrawTiles;
+$('sound').onclick=()=>{ initAudio(); beep(880,0.12,0.16); setTimeout(()=>beep(1175,0.16,0.16),150); try{const u=new SpeechSynthesisUtterance('Sonido activado');u.lang='es-ES';if(voz)u.voice=voz;speechSynthesis.speak(u);}catch(e){} $('sound').classList.add('on'); $('sound').textContent='🔊'; $('status').textContent='🔊 Sonido activado'; };
 let tileErrTmr=null;
 function onTileErr(){ if(tileErrTmr)return; tileErrTmr=setTimeout(()=>{ tileErrTmr=null; try{ if(curBase)curBase.redraw(); }catch(e){} },2500); }
 [satLayer,streetDay,streetNight].forEach(l=>l.on('tileerror',onTileErr));
@@ -336,10 +340,19 @@ async function fetchLimit(ll){
 // ===== voz + señal de radar =====
 let voz=null; if('speechSynthesis'in window){const pv=()=>{const vs=speechSynthesis.getVoices();voz=vs.find(v=>/es[-_]ES/i.test(v.lang))||vs.find(v=>/^es/i.test(v.lang))||null;};pv();speechSynthesis.onvoiceschanged=pv;}
 function speak(t){try{const u=new SpeechSynthesisUtterance(t);u.lang='es-ES';if(voz)u.voice=voz;speechSynthesis.cancel();speechSynthesis.speak(u);}catch(e){}}
+// ---------- audio fiable por altavoces (Web Audio) ----------
+let AC=null, audioOn=false;
+function initAudio(){ try{ if(!AC) AC=new (window.AudioContext||window.webkitAudioContext)(); if(AC.state==='suspended') AC.resume();
+  const b=AC.createBuffer(1,1,22050); const src=AC.createBufferSource(); src.buffer=b; src.connect(AC.destination); src.start(0); audioOn=true; }catch(e){} }
+function beep(freq,dur,vol){ try{ if(!AC) initAudio(); if(!AC)return; const o=AC.createOscillator(),g=AC.createGain(); o.type='sine'; o.frequency.value=freq||880; o.connect(g); g.connect(AC.destination); g.gain.setValueAtTime(vol||0.16,AC.currentTime); o.start(); g.gain.exponentialRampToValueAtTime(0.001,AC.currentTime+(dur||0.15)); o.stop(AC.currentTime+(dur||0.15)); }catch(e){} }
+function radarBeep(){ beep(1100,0.14,0.2); setTimeout(()=>beep(1100,0.14,0.2),190); }
+function firstGesture(){ initAudio(); }
+document.addEventListener('pointerdown',firstGesture,{once:true});
+document.addEventListener('touchstart',firstGesture,{once:true,passive:true});
 function updateRadar(){
   if(!disp)return; let best=null;
   for(const p of radars){ p.dist=dist([disp.lat,disp.lon],p.ll); const ah=Math.abs(((bearing([disp.lat,disp.lon],p.ll)-disp.head+540)%360)-180)<95; if(!ah)continue;
-    if(p.dist<800&&(!best||p.dist<best.dist))best=p; if(p.dist<520&&!p._al){p._al=true;speak('A '+fmtDist(p.dist)+', radar'+(p.max?' a '+p.max:''));} if(p.dist>700)p._al=false; }
+    if(p.dist<800&&(!best||p.dist<best.dist))best=p; if(p.dist<520&&!p._al){p._al=true;radarBeep();speak('A '+fmtDist(p.dist)+', radar'+(p.max?' a '+p.max:''));} if(p.dist>700)p._al=false; }
   const el=$('radarsign'); if(!best){el.classList.remove('show','hot');return;}
   if(hudOn){ const pp=1-Math.min(1,best.dist/800); el.style.left=(70+pp*16)+'%'; el.style.top=(58+pp*36)+'%'; el.style.transform='translate(-50%,-100%) scale('+(0.5+pp*0.85).toFixed(3)+')'; el.classList.remove('nopole'); }
   else { el.style.left='92%'; el.style.top='72%'; el.style.transform='translate(-50%,-100%) scale(1.3)'; el.classList.add('nopole'); }

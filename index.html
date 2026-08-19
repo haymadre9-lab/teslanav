@@ -138,7 +138,6 @@
       <button class="setbtn on" id="setChargers">⚡ Cargadores</button>
       <button class="setbtn on" id="setEvList">📋 Lista EV</button>
       <button class="setbtn" id="avoidTolls">🚫 Peajes</button>
-      <button class="setbtn" id="battery">🔋 Batería</button>
     </div>
     <div class="srow"><span>Potencia mínima de cargadores</span>
       <div class="segs"><button class="seg on" data-kw="0">Todos</button><button class="seg" data-kw="50">50+ kW</button><button class="seg" data-kw="150">150+ kW</button></div>
@@ -345,7 +344,7 @@ $('rain').onclick=async ()=>{ if(rainOn){ if(rainLayer)map.removeLayer(rainLayer
 setInterval(async ()=>{ if(rainOn){ const ok=await loadRainTs(); if(ok&&rainLayer)rainLayer.setUrl(rainUrl()); } }, 300000);
 // ---------- planificador de carga en ruta ----------
 const planGroup=L.layerGroup().addTo(map);
-let routeChargers=[], batteryPct=null, rangeKm=400;
+let routeChargers=[];
 function cumDist(c){ const cum=[0]; let d=0; for(let i=1;i<c.length;i++){ d+=dist(c[i-1],c[i]); cum.push(d);} return cum; }
 function distAlong(ll,c,cum){ let bi=0,bd=1e9; for(let i=0;i<c.length;i++){ const dd=dist(ll,c[i]); if(dd<bd){bd=dd;bi=i;} } return cum[bi]||0; }
 async function planCharge(){ planGroup.clearLayers(); routeChargers=[]; if(routeCoordsLL.length<2){ $('plan').style.display='none'; return; }
@@ -363,13 +362,9 @@ async function planCharge(){ planGroup.clearLayers(); routeChargers=[]; if(route
   showChargePlan();
 }
 function showChargePlan(){ const box=$('plan'); if(!routeChargers.length){ box.style.display='none'; return; }
-  let rec=null; if(batteryPct!=null){ const reach=batteryPct/100*rangeKm*1000*0.85; for(const c of routeChargers){ if(c.along<=reach) rec=c; } }
-  const rows=routeChargers.slice(0,6).map(c=>{ const km=(c.along/1000).toFixed(0); const isr=rec&&c===rec; return '<div class="prow'+(isr?' rec':'')+'">'+(isr?'⚡ ':'')+(c.op||'EV')+' · '+c.kw+' kW · km '+km+'</div>'; }).join('');
-  box.innerHTML='<div class="ptitle">Carga en ruta ('+routeChargers.length+')'+(batteryPct!=null?' · '+batteryPct+'%':'')+'</div>'+rows+((batteryPct!=null&&!rec)?'<div class="pwarn">Ninguno dentro de tu alcance</div>':'');
+  const rows=routeChargers.slice(0,6).map(c=>{ const km=(c.along/1000).toFixed(0); return '<div class="prow">'+(c.op||'EV')+' · '+c.kw+' kW · km '+km+'</div>'; }).join('');
+  box.innerHTML='<div class="ptitle">Carga en ruta ('+routeChargers.length+')</div>'+rows;
   box.style.display='block'; }
-$('battery').onclick=()=>{ const b=prompt('Batería actual (%) — vacío para quitar:', batteryPct!=null?batteryPct:''); if(b===null)return;
-  if(b.trim()===''){ batteryPct=null; } else { const n=parseInt(b,10); if(!isNaN(n)){ batteryPct=Math.max(0,Math.min(100,n)); const rg=prompt('Autonomía a full (km):', rangeKm); if(rg){ const rn=parseInt(rg,10); if(!isNaN(rn))rangeKm=rn; } } }
-  $('battery').classList.toggle('on', batteryPct!=null); showChargePlan(); };
 $('sound').onclick=()=>{ initAudio(); beep(880,0.12,0.16); setTimeout(()=>beep(1175,0.16,0.16),150); try{const u=new SpeechSynthesisUtterance('Sonido activado');u.lang='es-ES';if(voz)u.voice=voz;speechSynthesis.speak(u);}catch(e){} $('sound').classList.add('on'); $('sound').textContent='🔊 Sonido'; $('status').textContent='🔊 Sonido activado'; };
 let tileErrTmr=null;
 function onTileErr(){ if(tileErrTmr)return; tileErrTmr=setTimeout(()=>{ tileErrTmr=null; try{ if(curBase)curBase.redraw(); }catch(e){} },2500); }
@@ -623,7 +618,7 @@ function setTraffic(on){ const key=(localStorage.getItem('ttKey')||TT).trim(); i
   else { if(trafficLayer&&map.hasLayer(trafficLayer))map.removeLayer(trafficLayer); trafficOn=false; $('traffic').classList.remove('on'); } }
 $('traffic').onclick=()=>setTraffic(!trafficOn);
 // ---------- recordar ajustes (localStorage) ----------
-function saveSettings(){ try{ localStorage.setItem('cfg',JSON.stringify({tilt,mapNite,baseSat,minKw,showRadars,showChargers,evListHidden,avoidTolls,batteryPct,rangeKm,trafficOn})); }catch(e){} }
+function saveSettings(){ try{ localStorage.setItem('cfg',JSON.stringify({tilt,mapNite,baseSat,minKw,showRadars,showChargers,evListHidden,avoidTolls,trafficOn})); }catch(e){} }
 function loadSettings(){ try{ const c=JSON.parse(localStorage.getItem('cfg')||'{}');
   if(c.tilt===false){ tilt=false; const b=$('setTilt'); if(b)b.classList.remove('on'); }
   if(c.baseSat===false) baseSat=false;
@@ -635,8 +630,6 @@ function loadSettings(){ try{ const c=JSON.parse(localStorage.getItem('cfg')||'{
   if(c.showChargers===false){ showChargers=false; const b=$('setChargers'); if(b)b.classList.remove('on'); chargerGroup.clearLayers(); }
   if(c.evListHidden){ evListHidden=true; const b=$('setEvList'); if(b)b.classList.remove('on'); }
   if(c.avoidTolls){ avoidTolls=true; const b=$('avoidTolls'); if(b)b.classList.add('on'); }
-  if(typeof c.batteryPct==='number'){ batteryPct=c.batteryPct; const b=$('battery'); if(b)b.classList.add('on'); }
-  if(typeof c.rangeKm==='number') rangeKm=c.rangeKm;
   if(c.trafficOn) setTraffic(true);
 }catch(e){} }
 loadSettings();
@@ -653,8 +646,6 @@ function applyRemoteConfig(c){ if(!c)return;
   if('showChargers'in c){ showChargers=!!c.showChargers; $('setChargers').classList.toggle('on',showChargers); if(!showChargers)chargerGroup.clearLayers(); else drawChargers(); }
   if('evListHidden'in c){ evListHidden=!!c.evListHidden; $('setEvList').classList.toggle('on',!evListHidden); }
   if('avoidTolls'in c){ avoidTolls=!!c.avoidTolls; $('avoidTolls').classList.toggle('on',avoidTolls); }
-  if(typeof c.batteryPct==='number'){ batteryPct=c.batteryPct; $('battery').classList.add('on'); }
-  if(typeof c.rangeKm==='number') rangeKm=c.rangeKm;
   if('trafficOn'in c){ if(c.trafficOn&&!trafficOn)setTraffic(true); else if(!c.trafficOn&&trafficOn)setTraffic(false); }
   saveSettings(); updateHudCharger();
   if(c.dest && c.dest.lat){ if(c.startRoute){ pendingRoute=[c.dest.lat,c.dest.lon]; } else { $('dest').value=c.dest.name||''; } }

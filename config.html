@@ -61,7 +61,6 @@
 <div class="card">
   <h2>Ruta y batería</h2>
   <div class="toggle"><span>Evitar peajes</span><label class="sw"><input type="checkbox" id="avoidTolls"><i></i></label></div>
-  <div class="row"><div><label>Batería (%)</label><input id="batteryPct" type="number" min="0" max="100" placeholder="—"></div><div><label>Autonomía full (km)</label><input id="rangeKm" type="number" value="400"></div></div>
 </div>
 
 <button class="big save" id="saveBtn">Guardar en la nube</button>
@@ -86,9 +85,7 @@ function collect(){ return {
   dest, startRoute:$('startRoute').checked,
   baseSat:$('base').value==='sat', tilt:$('tilt').checked, mapNite:$('mapNite').checked, trafficOn:$('trafficOn').checked,
   minKw, showRadars:$('showRadars').checked, showChargers:$('showChargers').checked, evListHidden:!$('evList').checked,
-  avoidTolls:$('avoidTolls').checked,
-  batteryPct: $('batteryPct').value!==''? Math.max(0,Math.min(100,+$('batteryPct').value)) : null,
-  rangeKm: +$('rangeKm').value||400
+  avoidTolls:$('avoidTolls').checked
 }; }
 function fill(c){ if(!c)return;
   if(c.dest){ dest=c.dest; $('destq').value=c.dest.name||''; $('found').textContent='✓ '+(c.dest.name||''); }
@@ -96,7 +93,7 @@ function fill(c){ if(!c)return;
   $('tilt').checked=!!c.tilt; $('mapNite').checked=!!c.mapNite; $('trafficOn').checked=!!c.trafficOn;
   minKw=c.minKw||0; document.querySelectorAll('.seg[data-kw]').forEach(x=>x.classList.toggle('on',+x.dataset.kw===minKw));
   $('showRadars').checked=c.showRadars!==false; $('showChargers').checked=c.showChargers!==false; $('evList').checked=!c.evListHidden;
-  $('avoidTolls').checked=!!c.avoidTolls; $('batteryPct').value=(typeof c.batteryPct==='number')?c.batteryPct:''; $('rangeKm').value=c.rangeKm||400;
+  $('avoidTolls').checked=!!c.avoidTolls;
 }
 
 $('saveBtn').onclick=async ()=>{ const pin=$('pin').value.trim(); if(!pin){ $('msg').textContent='Escribe un PIN'; return; }

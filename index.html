@@ -18,6 +18,7 @@
   #hud.nite #beams{display:block;}
   .beam{position:absolute;bottom:0;left:50%;width:24%;height:100%;background:linear-gradient(to top, rgba(255,244,205,.7), rgba(255,244,205,.06) 62%, transparent);filter:blur(9px);transform-origin:bottom center;border-radius:45% 45% 0 0;}
   .bl{transform:translateX(-50%) rotate(-11deg);} .br{transform:translateX(-50%) rotate(11deg);}
+  #hudrain{position:absolute;inset:0;width:100%;height:100%;z-index:4;pointer-events:none;}
   #hud img#hudcar{position:absolute;z-index:3;left:50%;top:60%;transform:translate(-50%,-50%);width:32%;filter:drop-shadow(0 10px 10px rgba(0,0,0,.35));}
   #hudchg{position:absolute;z-index:20;left:10px;top:64px;display:none;flex-direction:column;align-items:flex-start;gap:5px;max-width:78vw;}
   #hudchg .evrow{display:flex;align-items:center;gap:8px;background:rgba(16,18,24,.9);border:1px solid var(--bd);border-radius:11px;padding:6px 10px;font-size:13px;font-weight:700;color:var(--txt);white-space:nowrap;cursor:pointer;}
@@ -109,6 +110,7 @@
     <canvas id="hudroad"></canvas>
     <div id="beams"><div class="beam bl"></div><div class="beam br"></div></div>
     <img id="hudcar" alt="">
+    <canvas id="hudrain"></canvas>
   </div>
   <div id="hudchg" style="display:none"></div>
 
@@ -183,6 +185,14 @@ function hudResize(){ hudcv.width=window.innerWidth; hudcv.height=window.innerHe
 hudResize(); window.addEventListener('resize',hudResize);
 function hprojY(z,horizon,H){ return horizon + (H-horizon)*(1/(1+z*0.06)); }
 let roadPhase=0;
+let rainDrops=null, rainWasOn=false;
+function initRain(){ rainDrops=[]; for(let i=0;i<110;i++) rainDrops.push({x:Math.random(),y:Math.random(),l:0.02+Math.random()*0.05,s:0.7+Math.random()*0.9}); }
+function drawHudRain(dt){ const cv=document.getElementById('hudrain'); if(!cv)return; if(cv.width!==window.innerWidth||cv.height!==window.innerHeight){cv.width=window.innerWidth;cv.height=window.innerHeight;} const ctx=cv.getContext('2d'); const W=cv.width,H=cv.height; if(!rainDrops)initRain();
+  ctx.clearRect(0,0,W,H); ctx.strokeStyle='rgba(180,200,230,.45)'; ctx.lineWidth=1.5; const slant=0.16;
+  for(const d of rainDrops){ d.y+=d.s*dt*1.7; d.x+=slant*d.s*dt*0.3; if(d.y>1.05){ d.y=-0.05; d.x=Math.random(); } const x=d.x*W,y=d.y*H,len=d.l*H; ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x-slant*len,y+len); ctx.stroke(); }
+  rainWasOn=true;
+}
+function clearHudRain(){ if(!rainWasOn)return; const cv=document.getElementById('hudrain'); if(cv&&cv.width){ cv.getContext('2d').clearRect(0,0,cv.width,cv.height); } rainWasOn=false; }
 function drawHudRoad(phase){
   const W=hudcv.width,H=hudcv.height; const horizon=H*0.34, vpx=W*0.5, blX=W*0.10, brX=W*0.90;
   hctx.clearRect(0,0,W,H);
@@ -274,7 +284,8 @@ let routeCasing=null, routeLine=null;
 // ===== estado =====
 let raw=null, disp=null, follow=true, speedKmh=0, limit=null;
 let pois=[], lastPoiPos=null, lastPoiAt=0, lastLimPos=null, lastLimAt=0;
-let radarDB=[], radars=[];
+let radarDB=[], radars=[], raining=false, lastWxPos=null, lastWxAt=0;
+async function checkWeather(lat,lon){ try{ const r=await fetch("https://api.open-meteo.com/v1/forecast?latitude="+lat+"&longitude="+lon+"&current=precipitation,weather_code"); const j=await r.json(); const p=(j.current&&j.current.precipitation)||0; const wc=(j.current&&j.current.weather_code)||0; raining=(p>0)||(wc>=51&&wc<=67)||(wc>=80&&wc<=99); }catch(e){} }
 fetch('radares.json').then(r=>r.json()).then(d=>{ radarDB=d; if(disp) refreshRadars([disp.lat,disp.lon]); }).catch(()=>{});
 
 // ===== GPS =====
@@ -291,6 +302,7 @@ navigator.geolocation && navigator.geolocation.watchPosition(p=>{
   $('status').textContent='GPS '+c.latitude.toFixed(4)+', '+c.longitude.toFixed(4)+' · ±'+acc+' m'+(acc>800?' (impreciso)':' ✔');
   const here=[raw.lat,raw.lon];
   if(!lastPoiPos||dist(lastPoiPos,here)>800||now-lastPoiAt>60000){lastPoiAt=now;lastPoiPos=here;fetchPois(here);refreshRadars(here);}
+  if(!lastWxPos||dist(lastWxPos,here)>5000||now-lastWxAt>600000){lastWxAt=now;lastWxPos=here;checkWeather(here[0],here[1]);}
   if(!lastLimPos||dist(lastLimPos,here)>250||now-lastLimAt>20000){lastLimAt=now;lastLimPos=here;fetchLimit(here);}
 },e=>{$('status').textContent='GPS: '+e.message;},{enableHighAccuracy:true,maximumAge:1000,timeout:20000});
 locate();
@@ -317,7 +329,7 @@ function frame(now){
       }
     }
     $('spd').textContent=Math.round(speedKmh);
-    if(hudOn){ roadPhase=(roadPhase + speedKmh*dt*0.9)%13; drawHudRoad(roadPhase); }
+    if(hudOn){ roadPhase=(roadPhase + speedKmh*dt*0.9)%13; drawHudRoad(roadPhase); if(raining) drawHudRain(dt); else clearHudRain(); }
     if(now-lastLogic>120){ lastLogic=now;
       if(limit){ $('limit').style.display='flex'; $('limitn').textContent=limit; $('spd').classList.toggle('over',speedKmh>limit+3); } else $('limit').style.display='none';
       updateRadar();
@@ -354,7 +366,7 @@ async function loadRainTs(){ try{ const r=await fetch('https://api.rainviewer.co
 function rainUrl(){ return rainHost+rainPath+'/256/{z}/{x}/{y}/4/1_1.png'; }
 $('rain').onclick=async ()=>{ if(rainOn){ if(rainLayer)map.removeLayer(rainLayer); rainOn=false; $('rain').classList.remove('on'); return; }
   const ok=await loadRainTs(); if(!ok){ $('status').textContent='Lluvia no disponible'; return; }
-  if(rainLayer)map.removeLayer(rainLayer); rainLayer=L.tileLayer(rainUrl(),{opacity:0.55,zIndex:250}); rainLayer.addTo(map); rainOn=true; $('rain').classList.add('on'); };
+  if(rainLayer)map.removeLayer(rainLayer); rainLayer=L.tileLayer(rainUrl(),{opacity:0.6,zIndex:250,tileSize:256,maxNativeZoom:12,maxZoom:19}); rainLayer.addTo(map); rainOn=true; $('rain').classList.add('on'); };
 setInterval(async ()=>{ if(rainOn){ const ok=await loadRainTs(); if(ok&&rainLayer)rainLayer.setUrl(rainUrl()); } }, 300000);
 // ---------- planificador de carga en ruta ----------
 $('sound').onclick=()=>{ initAudio(); beep(880,0.12,0.16); setTimeout(()=>beep(1175,0.16,0.16),150); speak('Sonido activado'); $('sound').classList.add('on'); $('sound').textContent='🔊 Sonido'; $('status').textContent='🔊 Sonido activado'; };

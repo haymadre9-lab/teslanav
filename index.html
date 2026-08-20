@@ -57,6 +57,8 @@
   .rain.on{background:#0e2740;color:#7cc4ff;border-color:#7cc4ff;}
   .sound{bottom:10px;right:280px;background:rgba(16,18,24,.85);border:1px solid var(--bd);color:var(--txt);border-radius:12px;padding:10px 12px;cursor:pointer;font-size:15px;}
   .sound.on{background:#173a24;color:#39d98a;border-color:#39d98a;}
+  .zoomIn{bottom:64px;right:10px;background:rgba(16,18,24,.85);border:1px solid var(--bd);color:var(--txt);border-radius:12px;padding:10px 12px;cursor:pointer;font-size:15px;}
+  .zoomOut{bottom:64px;right:64px;background:rgba(16,18,24,.85);border:1px solid var(--bd);color:var(--txt);border-radius:12px;padding:10px 12px;cursor:pointer;font-size:15px;}
   .gear{bottom:10px;right:172px;background:rgba(16,18,24,.85);border:1px solid var(--bd);color:var(--txt);border-radius:12px;padding:10px 12px;cursor:pointer;font-size:15px;}
   #settings{position:absolute;top:0;right:0;width:min(320px,82vw);height:100%;background:rgba(10,12,18,.98);border-left:1px solid var(--bd);z-index:1000;transform:translateX(100%);transition:transform .25s;padding:14px;overflow-y:auto;}
   #settings.open{transform:translateX(0);}
@@ -118,6 +120,8 @@
   <button class="ovl daynight" id="daynight">🌙</button>
   <button class="ovl refresh" id="refresh" title="Actualizar mapa">🔄</button>
   <button class="ovl gear" id="gear" title="Ajustes">⚙️</button>
+  <button class="ovl zoomIn" id="zoomIn" title="Acercar">➕</button>
+  <button class="ovl zoomOut" id="zoomOut" title="Alejar">➖</button>
   <button class="ovl recenter" id="recenter">🎯</button>
   <div id="settings">
     <div class="shead"><span>Ajustes</span><button id="setClose">✕</button></div>
@@ -130,7 +134,12 @@
       <button class="setbtn on" id="setRadar">📷 Radares</button>
       <button class="setbtn on" id="setChargers">⚡ Cargadores</button>
       <button class="setbtn on" id="setEvList">📋 Lista EV</button>
-      <button class="setbtn" id="avoidTolls">🚫 Peajes</button>
+    </div>
+    <div class="srow"><span>Tipo de ruta</span>
+      <div class="segs"><button class="seg on" data-rt="fastest">Rápida</button><button class="seg" data-rt="shortest">Corta</button><button class="seg" data-rt="eco">Eco</button></div>
+    </div>
+    <div class="srow"><span>Evitar</span>
+      <div class="sgrid"><button class="setbtn" id="avoidTolls">🚫 Peajes</button><button class="setbtn" id="avoidMotorways">🚫 Autovías</button><button class="setbtn" id="avoidFerries">🚫 Ferris</button></div>
     </div>
     <div class="srow"><span>Potencia mínima de cargadores</span>
       <div class="segs"><button class="seg on" data-kw="0">Todos</button><button class="seg" data-kw="50">50+ kW</button><button class="seg" data-kw="150">150+ kW</button></div>
@@ -240,14 +249,15 @@ function instrES(s){const m=s.maneuver||{},mod=m.modifier,type=m.type,name=s.nam
 
 // ===== mapa Leaflet (raster, sin WebGL) =====
 const map=L.map('map',{zoomControl:false,attributionControl:false,preferCanvas:true,zoomSnap:0.5,fadeAnimation:false,inertia:true,minZoom:5,maxZoom:19});
-map.setView([43.26,-2.93],16);
+let navZoom=16;
+map.setView([43.26,-2.93],navZoom);
 L.control.attribution({prefix:false,position:'bottomright'}).addAttribution('© TomTom').addTo(map);
 const satLayer=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,keepBuffer:6,updateWhenZooming:false,crossOrigin:true,attribution:'© Esri'});
 const streetDay=L.tileLayer('https://api.tomtom.com/map/1/tile/basic/main/{z}/{x}/{y}.png?key='+TT+'&tileSize=256',{maxZoom:19,keepBuffer:6,updateWhenZooming:false,crossOrigin:true,attribution:'© TomTom'});
 const streetNight=L.tileLayer('https://api.tomtom.com/map/1/tile/basic/night/{z}/{x}/{y}.png?key='+TT+'&tileSize=256',{maxZoom:19,keepBuffer:6,updateWhenZooming:false,crossOrigin:true,attribution:'© TomTom'});
 satLayer.addTo(map);
 let baseSat=true, mapNite=false, curBase=satLayer, trafficLayer=null, trafficOn=false;
-let tilt=true, minKw=0, showRadars=true, showChargers=true, evListHidden=false, avoidTolls=false;
+let tilt=true, minKw=0, showRadars=true, showChargers=true, evListHidden=false, avoidTolls=false, avoidMotorways=false, avoidFerries=false, routeType="fastest";
 const carIcon=L.divIcon({className:'',html:'<div id="carrot"><svg width="38" height="38" viewBox="0 0 24 24"><path d="M12 2 L20 21 L12 15.5 L4 21 Z" fill="#ff2d2d" stroke="#fff" stroke-width="1.3"/></svg></div>',iconSize:[38,38],iconAnchor:[19,19]});
 const carMk=L.marker([43.26,-2.93],{icon:carIcon,interactive:false,keyboard:false,zIndexOffset:1000}).addTo(map);
 const chargerGroup=L.layerGroup().addTo(map);
@@ -291,7 +301,7 @@ function frame(now){
       carMk.setLatLng([disp.lat,disp.lon]);
       const cr=$('carrot'); if(cr) cr.style.transform='rotate('+disp.head.toFixed(0)+'deg)';   // contrarrota: flecha siempre hacia arriba
       if(follow && now-lastCam>50){ lastCam=now;
-        const z=map.getZoom();
+        const z=navZoom;
         const mpp=156543.03392*Math.cos(disp.lat*Math.PI/180)/Math.pow(2,z);
         const aheadD=(window.innerHeight*0.24)*mpp;           // adelanta el centro -> coche más abajo
         const c=moveLL(disp.lat,disp.lon,disp.head,aheadD);
@@ -323,24 +333,31 @@ $('setTilt').onclick=()=>{ tilt=!tilt; $('setTilt').classList.toggle('on',tilt);
 $('setRadar').onclick=()=>{ showRadars=!showRadars; $('setRadar').classList.toggle('on',showRadars); if(!showRadars){radarGroup.clearLayers(); $('radarsign').classList.remove('show','hot');} else drawRadars(); };
 $('setChargers').onclick=()=>{ showChargers=!showChargers; $('setChargers').classList.toggle('on',showChargers); if(!showChargers)chargerGroup.clearLayers(); else drawChargers(); updateHudCharger(); };
 $('setEvList').onclick=()=>{ evListHidden=!evListHidden; $('setEvList').classList.toggle('on',!evListHidden); updateHudCharger(); };
-$('avoidTolls').onclick=()=>{ avoidTolls=!avoidTolls; $('avoidTolls').classList.toggle('on',avoidTolls); if(routeOn&&destLL) routeTo(destLL); };
-document.querySelectorAll('#settings .seg').forEach(b=>{ b.onclick=()=>{ minKw=+b.dataset.kw; document.querySelectorAll('#settings .seg').forEach(x=>x.classList.toggle('on',x===b)); drawChargers(); updateHudCharger(); }; });
+function rerouteIfActive(){ if(routeOn&&destLL) routeTo(destLL); }
+$('avoidTolls').onclick=()=>{ avoidTolls=!avoidTolls; $('avoidTolls').classList.toggle('on',avoidTolls); saveSettings(); rerouteIfActive(); };
+$('avoidMotorways').onclick=()=>{ avoidMotorways=!avoidMotorways; $('avoidMotorways').classList.toggle('on',avoidMotorways); saveSettings(); rerouteIfActive(); };
+$('avoidFerries').onclick=()=>{ avoidFerries=!avoidFerries; $('avoidFerries').classList.toggle('on',avoidFerries); saveSettings(); rerouteIfActive(); };
+document.querySelectorAll('#settings .seg[data-rt]').forEach(b=>{ b.onclick=()=>{ routeType=b.dataset.rt; document.querySelectorAll('#settings .seg[data-rt]').forEach(x=>x.classList.toggle('on',x===b)); saveSettings(); rerouteIfActive(); }; });
+document.querySelectorAll('#settings .seg[data-kw]').forEach(b=>{ b.onclick=()=>{ minKw=+b.dataset.kw; document.querySelectorAll('#settings .seg[data-kw]').forEach(x=>x.classList.toggle('on',x===b)); drawChargers(); updateHudCharger(); saveSettings(); }; });
 // refresco periódico de teselas (recupera negros) sin tocar la ruta
 setInterval(()=>{ try{ if(curBase&&!interacting)curBase.redraw(); }catch(e){} }, 18000);
 // ---------- capa de lluvia (RainViewer) ----------
 let rainLayer=null, rainOn=false, rainHost='', rainPath='';
 async function loadRainTs(){ try{ const r=await fetch('https://api.rainviewer.com/public/weather-maps.json'); const j=await r.json(); const past=(j.radar&&j.radar.past)||[]; const last=past[past.length-1]; if(last){ rainHost=j.host; rainPath=last.path; return true; } }catch(e){} return false; }
-function rainUrl(){ return rainHost+rainPath+'/256/{z}/{x}/{y}/2/1_1.png'; }
+function rainUrl(){ return rainHost+rainPath+'/256/{z}/{x}/{y}/4/1_1.png'; }
 $('rain').onclick=async ()=>{ if(rainOn){ if(rainLayer)map.removeLayer(rainLayer); rainOn=false; $('rain').classList.remove('on'); return; }
   const ok=await loadRainTs(); if(!ok){ $('status').textContent='Lluvia no disponible'; return; }
   if(rainLayer)map.removeLayer(rainLayer); rainLayer=L.tileLayer(rainUrl(),{opacity:0.55,zIndex:250}); rainLayer.addTo(map); rainOn=true; $('rain').classList.add('on'); };
 setInterval(async ()=>{ if(rainOn){ const ok=await loadRainTs(); if(ok&&rainLayer)rainLayer.setUrl(rainUrl()); } }, 300000);
 // ---------- planificador de carga en ruta ----------
-$('sound').onclick=()=>{ initAudio(); beep(880,0.12,0.16); setTimeout(()=>beep(1175,0.16,0.16),150); try{const u=new SpeechSynthesisUtterance('Sonido activado');u.lang='es-ES';if(voz)u.voice=voz;speechSynthesis.speak(u);}catch(e){} $('sound').classList.add('on'); $('sound').textContent='🔊 Sonido'; $('status').textContent='🔊 Sonido activado'; };
+$('sound').onclick=()=>{ initAudio(); beep(880,0.12,0.16); setTimeout(()=>beep(1175,0.16,0.16),150); speak('Sonido activado'); $('sound').classList.add('on'); $('sound').textContent='🔊 Sonido'; $('status').textContent='🔊 Sonido activado'; };
 let tileErrTmr=null;
 function onTileErr(){ if(tileErrTmr)return; tileErrTmr=setTimeout(()=>{ tileErrTmr=null; try{ if(curBase)curBase.redraw(); }catch(e){} },2500); }
 [satLayer,streetDay,streetNight].forEach(l=>l.on('tileerror',onTileErr));
-$('recenter').onclick=()=>{ follow=true; locate(); if(disp) map.setView([disp.lat,disp.lon],16,{animate:true}); };
+$('recenter').onclick=()=>{ follow=true; locate(); if(disp) map.setView([disp.lat,disp.lon],navZoom,{animate:true}); };
+map.on('zoomend',()=>{ navZoom=map.getZoom(); saveSettings(); });
+$('zoomIn').onclick=()=>{ navZoom=Math.min(19,navZoom+1); map.setZoom(navZoom); saveSettings(); };
+$('zoomOut').onclick=()=>{ navZoom=Math.max(5,navZoom-1); map.setZoom(navZoom); saveSettings(); };
 
 // ===== POIs: cargadores (Overpass) + radares (base de pago) =====
 function parseMax(v){ if(!v)return null; const m=(''+v).match(/\d+/); return m?parseInt(m[0]):null; }
@@ -394,7 +411,11 @@ async function fetchLimit(ll){
 
 // ===== voz + señal de radar =====
 let voz=null; if('speechSynthesis'in window){const pv=()=>{const vs=speechSynthesis.getVoices();voz=vs.find(v=>/es[-_]ES/i.test(v.lang))||vs.find(v=>/^es/i.test(v.lang))||null;};pv();speechSynthesis.onvoiceschanged=pv;}
-function speak(t){try{const u=new SpeechSynthesisUtterance(t);u.lang='es-ES';if(voz)u.voice=voz;speechSynthesis.cancel();speechSynthesis.speak(u);}catch(e){}}
+let ttsA=null;
+function speak(t){ try{ if(!t)return; if(!ttsA){ ttsA=new Audio(); ttsA.preload='auto'; }
+  ttsA.src='https://translate.google.com/translate_tts?ie=UTF-8&tl=es&client=tw-ob&q='+encodeURIComponent(String(t).slice(0,190));
+  const p=ttsA.play(); if(p&&p.catch)p.catch(()=>{ try{const u=new SpeechSynthesisUtterance(t);u.lang='es-ES';if(voz)u.voice=voz;speechSynthesis.cancel();speechSynthesis.speak(u);}catch(e){} });
+}catch(e){} }
 // ---------- audio fiable por altavoces (Web Audio) ----------
 let AC=null, audioOn=false;
 function initAudio(){ try{ if(!AC) AC=new (window.AudioContext||window.webkitAudioContext)(); if(AC.state==='suspended') AC.resume();
@@ -446,6 +467,9 @@ function applyRoute(route){
   const instr=(route.guidance&&route.guidance.instructions)||[];
   steps=instr.map((it,i)=>{ const nx=instr[i+1]; const d=nx?Math.max(0,(nx.routeOffsetInMeters||0)-(it.routeOffsetInMeters||0)):0;
     return {distance:d,name:it.street||'',ll:[it.point.latitude,it.point.longitude],instr:it.message||'',maneuver:ttMan(it),_min:1e9,_v:false}; });
+  const keep=steps.filter(st=>{ const t=(st.maneuver||{}).type, mo=(st.maneuver||{}).modifier; if(t==='arrive'||t==='depart'||t==='roundabout'||t==='off ramp'||t==='merge'||t==='fork')return true; if(t==='turn'&&mo&&mo!=='straight')return true; return false; });
+  if(keep.length>=2) steps=keep;
+  const merged=[]; for(const st of steps){ if(merged.length){ const pv=merged[merged.length-1]; const tt=(st.maneuver||{}).type; if(dist(pv.ll,st.ll)<90 && tt!=='off ramp' && tt!=='roundabout' && tt!=='arrive'){ continue; } } merged.push(st); } if(merged.length>=2) steps=merged;
   if(!steps.length&&routeCoordsLL.length){ steps=[{distance:(route.summary&&route.summary.lengthInMeters)||0,name:'',ll:routeCoordsLL[0],instr:'Comienza la ruta',maneuver:{type:'depart'},_min:1e9,_v:false},{distance:0,name:'',ll:routeCoordsLL[routeCoordsLL.length-1],instr:'Has llegado a tu destino',maneuver:{type:'arrive'},_min:1e9,_v:false}]; }
   stepIdx=0; routeSummary=route.summary||null; renderStep(true);
 }
@@ -476,7 +500,8 @@ function lanesHTML(lanes){ return '<div class="lanerow">'+lanes.map(l=>laneArrow
 async function buildRoute(pts){ if(pts.length<2)return;
   fetchLanes(pts);
   try{ const locs=pts.map(p=>p[0]+','+p[1]).join(':');
-    const url='https://api.tomtom.com/routing/1/calculateRoute/'+locs+'/json?key='+TT+'&traffic=true&travelMode=car&routeType=fastest&sectionType=traffic&computeTravelTimeFor=all&maxAlternatives=2&instructionsType=text&language=es-ES'+(avoidTolls?'&avoid=tollRoads':'');
+    const av=[]; if(avoidTolls)av.push('tollRoads'); if(avoidMotorways)av.push('motorways'); if(avoidFerries)av.push('ferries');
+    const url='https://api.tomtom.com/routing/1/calculateRoute/'+locs+'/json?key='+TT+'&traffic=true&travelMode=car&routeType='+routeType+'&sectionType=traffic&computeTravelTimeFor=all&maxAlternatives=2&instructionsType=text&language=es-ES'+av.map(a=>'&avoid='+a).join('');
     const r=await fetch(url); const j=await r.json();
     if(!j.routes||!j.routes.length){ $('status').textContent='Sin ruta'; return; }
     destLL=pts[pts.length-1]; routeOn=true; offAcc=0;
@@ -589,7 +614,7 @@ function setTraffic(on){ const key=(localStorage.getItem('ttKey')||TT).trim(); i
   else { if(trafficLayer&&map.hasLayer(trafficLayer))map.removeLayer(trafficLayer); trafficOn=false; $('traffic').classList.remove('on'); } }
 $('traffic').onclick=()=>setTraffic(!trafficOn);
 // ---------- recordar ajustes (localStorage) ----------
-function saveSettings(){ try{ localStorage.setItem('cfg',JSON.stringify({tilt,mapNite,baseSat,minKw,showRadars,showChargers,evListHidden,avoidTolls,trafficOn})); }catch(e){} }
+function saveSettings(){ try{ localStorage.setItem('cfg',JSON.stringify({tilt,mapNite,baseSat,minKw,showRadars,showChargers,evListHidden,avoidTolls,avoidMotorways,avoidFerries,routeType,trafficOn,navZoom})); }catch(e){} }
 function loadSettings(){ try{ const c=JSON.parse(localStorage.getItem('cfg')||'{}');
   if(c.tilt===false){ tilt=false; const b=$('setTilt'); if(b)b.classList.remove('on'); }
   if(c.baseSat===false) baseSat=false;
@@ -601,6 +626,10 @@ function loadSettings(){ try{ const c=JSON.parse(localStorage.getItem('cfg')||'{
   if(c.showChargers===false){ showChargers=false; const b=$('setChargers'); if(b)b.classList.remove('on'); chargerGroup.clearLayers(); }
   if(c.evListHidden){ evListHidden=true; const b=$('setEvList'); if(b)b.classList.remove('on'); }
   if(c.avoidTolls){ avoidTolls=true; const b=$('avoidTolls'); if(b)b.classList.add('on'); }
+  if(c.avoidMotorways){ avoidMotorways=true; const b=$('avoidMotorways'); if(b)b.classList.add('on'); }
+  if(c.avoidFerries){ avoidFerries=true; const b=$('avoidFerries'); if(b)b.classList.add('on'); }
+  if(c.routeType){ routeType=c.routeType; document.querySelectorAll('#settings .seg[data-rt]').forEach(x=>x.classList.toggle('on',x.dataset.rt===routeType)); }
+  if(typeof c.navZoom==='number'){ navZoom=c.navZoom; map.setZoom(navZoom); }
   if(c.trafficOn) setTraffic(true);
 }catch(e){} }
 loadSettings();
@@ -617,6 +646,9 @@ function applyRemoteConfig(c){ if(!c)return;
   if('showChargers'in c){ showChargers=!!c.showChargers; $('setChargers').classList.toggle('on',showChargers); if(!showChargers)chargerGroup.clearLayers(); else drawChargers(); }
   if('evListHidden'in c){ evListHidden=!!c.evListHidden; $('setEvList').classList.toggle('on',!evListHidden); }
   if('avoidTolls'in c){ avoidTolls=!!c.avoidTolls; $('avoidTolls').classList.toggle('on',avoidTolls); }
+  if('avoidMotorways'in c){ avoidMotorways=!!c.avoidMotorways; $('avoidMotorways').classList.toggle('on',avoidMotorways); }
+  if('avoidFerries'in c){ avoidFerries=!!c.avoidFerries; $('avoidFerries').classList.toggle('on',avoidFerries); }
+  if(c.routeType){ routeType=c.routeType; document.querySelectorAll('#settings .seg[data-rt]').forEach(x=>x.classList.toggle('on',x.dataset.rt===routeType)); }
   if('trafficOn'in c){ if(c.trafficOn&&!trafficOn)setTraffic(true); else if(!c.trafficOn&&trafficOn)setTraffic(false); }
   saveSettings(); updateHudCharger();
   if(c.dest && c.dest.lat){ if(c.startRoute){ pendingRoute=[c.dest.lat,c.dest.lon]; } else { $('dest').value=c.dest.name||''; } }

@@ -60,7 +60,11 @@
 
 <div class="card">
   <h2>Ruta</h2>
+  <label>Tipo de ruta</label>
+  <select id="routeType"><option value="fastest">Más rápida (tráfico)</option><option value="shortest">Más corta</option><option value="eco">Ecológica</option></select>
   <div class="toggle"><span>Evitar peajes</span><label class="sw"><input type="checkbox" id="avoidTolls"><i></i></label></div>
+  <div class="toggle"><span>Evitar autovías</span><label class="sw"><input type="checkbox" id="avoidMotorways"><i></i></label></div>
+  <div class="toggle"><span>Evitar ferris</span><label class="sw"><input type="checkbox" id="avoidFerries"><i></i></label></div>
 </div>
 
 <button class="big save" id="saveBtn">Guardar en la nube</button>
@@ -85,7 +89,7 @@ function collect(){ return {
   dest, startRoute:$('startRoute').checked,
   baseSat:$('base').value==='sat', tilt:$('tilt').checked, mapNite:$('mapNite').checked, trafficOn:$('trafficOn').checked,
   minKw, showRadars:$('showRadars').checked, showChargers:$('showChargers').checked, evListHidden:!$('evList').checked,
-  avoidTolls:$('avoidTolls').checked
+  avoidTolls:$('avoidTolls').checked, avoidMotorways:$('avoidMotorways').checked, avoidFerries:$('avoidFerries').checked, routeType:$('routeType').value
 }; }
 function fill(c){ if(!c)return;
   if(c.dest){ dest=c.dest; $('destq').value=c.dest.name||''; $('found').textContent='✓ '+(c.dest.name||''); }
@@ -93,7 +97,7 @@ function fill(c){ if(!c)return;
   $('tilt').checked=!!c.tilt; $('mapNite').checked=!!c.mapNite; $('trafficOn').checked=!!c.trafficOn;
   minKw=c.minKw||0; document.querySelectorAll('.seg[data-kw]').forEach(x=>x.classList.toggle('on',+x.dataset.kw===minKw));
   $('showRadars').checked=c.showRadars!==false; $('showChargers').checked=c.showChargers!==false; $('evList').checked=!c.evListHidden;
-  $('avoidTolls').checked=!!c.avoidTolls;
+  $('avoidTolls').checked=!!c.avoidTolls; $('avoidMotorways').checked=!!c.avoidMotorways; $('avoidFerries').checked=!!c.avoidFerries; if(c.routeType)$('routeType').value=c.routeType;
 }
 
 $('saveBtn').onclick=async ()=>{ const pin=$('pin').value.trim(); if(!pin){ $('msg').textContent='Escribe un PIN'; return; }

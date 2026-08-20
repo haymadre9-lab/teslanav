@@ -411,11 +411,13 @@ async function fetchLimit(ll){
 
 // ===== voz + señal de radar =====
 let voz=null; if('speechSynthesis'in window){const pv=()=>{const vs=speechSynthesis.getVoices();voz=vs.find(v=>/es[-_]ES/i.test(v.lang))||vs.find(v=>/^es/i.test(v.lang))||null;};pv();speechSynthesis.onvoiceschanged=pv;}
-let ttsA=null;
-function speak(t){ try{ if(!t)return; if(!ttsA){ ttsA=new Audio(); ttsA.preload='auto'; }
-  ttsA.src='https://translate.google.com/translate_tts?ie=UTF-8&tl=es&client=tw-ob&q='+encodeURIComponent(String(t).slice(0,190));
-  const p=ttsA.play(); if(p&&p.catch)p.catch(()=>{ try{const u=new SpeechSynthesisUtterance(t);u.lang='es-ES';if(voz)u.voice=voz;speechSynthesis.cancel();speechSynthesis.speak(u);}catch(e){} });
-}catch(e){} }
+let ttsA=null, ttsSrc=null;
+async function speak(t){ if(!t)return; const url='https://api.streamelements.com/kappa/v2/speech?voice=Enrique&text='+encodeURIComponent(String(t).slice(0,200));
+  try{ if(!AC) initAudio(); if(AC){ if(AC.state==='suspended'){ try{await AC.resume();}catch(e){} }
+    const r=await fetch(url); if(r.ok){ const b=await r.arrayBuffer(); const au=await AC.decodeAudioData(b);
+      if(ttsSrc){ try{ttsSrc.stop();}catch(e){} } ttsSrc=AC.createBufferSource(); ttsSrc.buffer=au; ttsSrc.connect(AC.destination); ttsSrc.start(0); return; } } }catch(e){}
+  try{ if(!ttsA)ttsA=new Audio(); ttsA.src=url; ttsA.play().catch(()=>{}); }catch(e){}
+}
 // ---------- audio fiable por altavoces (Web Audio) ----------
 let AC=null, audioOn=false;
 function initAudio(){ try{ if(!AC) AC=new (window.AudioContext||window.webkitAudioContext)(); if(AC.state==='suspended') AC.resume();

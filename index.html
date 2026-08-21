@@ -429,12 +429,12 @@ function chargerInfo(tg){
 }
 async function fetchPois(ll){
   try{
-    const url='https://api.openchargemap.io/v3/poi/?output=json&latitude='+ll[0]+'&longitude='+ll[1]+'&distance=6&distanceunit=KM&maxresults=150&compact=true&verbose=false&key='+OCM_KEY;
+    const url='https://api.openchargemap.io/v3/poi/?output=json&latitude='+ll[0]+'&longitude='+ll[1]+'&distance=6&distanceunit=KM&maxresults=100&compact=false&verbose=false&key='+OCM_KEY;
     const r=await fetch(url); if(!r.ok)return; const j=await r.json(); const arr=[];
     for(const poi of (j||[])){ const ai=poi.AddressInfo; if(!ai)continue;
       const conns=poi.Connections||[]; let kw=0; const socks=[];
       for(const c of conns){ if(c.PowerKW&&c.PowerKW>kw)kw=c.PowerKW; const t=c.ConnectionType&&c.ConnectionType.Title; if(t){ let n=t.replace('CCS (Type 2)','CCS').replace('Type 2','Tipo 2'); if(socks.indexOf(n)<0)socks.push(n); } }
-      arr.push({type:'charge',ll:[ai.Latitude,ai.Longitude],name:ai.Title||'Punto de carga',op:(poi.OperatorInfo&&poi.OperatorInfo.Title)||'',kw:kw?Math.round(kw):0,socks:socks,pts:poi.NumberOfPoints||0,usage:(poi.UsageType&&poi.UsageType.Title)||''});
+      arr.push({type:'charge',ll:[ai.Latitude,ai.Longitude],name:ai.Title||'Punto de carga',op:(function(){var t=(poi.OperatorInfo&&poi.OperatorInfo.Title)||'';return /unknown|desconoc/i.test(t)?'':t;})(),kw:kw?Math.round(kw):0,socks:socks,pts:poi.NumberOfPoints||0,usage:(poi.UsageType&&poi.UsageType.Title)||''});
     }
     pois=arr; drawChargers();
   }catch(e){}

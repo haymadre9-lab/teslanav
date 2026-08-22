@@ -195,8 +195,8 @@ function drawHudRain(dt){ const cv=document.getElementById('hudrain'); if(!cv)re
   ctx.clearRect(0,0,W,H); ctx.strokeStyle='rgba(180,200,230,.45)'; ctx.lineWidth=1.5; const slant=0.16;
   for(const d of rainDrops){ d.y+=d.s*dt*1.7; d.x+=slant*d.s*dt*0.3; if(d.y>1.05){ d.y=-0.05; d.x=Math.random(); } const x=d.x*W,y=d.y*H,len=d.l*H; ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x-slant*len,y+len); ctx.stroke(); }
   // salpicadura de ruedas al circular con lluvia
-  const carY=0.72*H, cx=(hudLineX?hudLineX(W*0.5,carY):W*0.5);
-  if(speedKmh>15 && splash.length<180){ const n=Math.min(5,1+Math.round(speedKmh/28)); for(let k=0;k<n;k++){ for(const side of [-1,1]){ splash.push({x:cx+side*W*0.07,y:carY,vx:side*(8+Math.random()*28),vy:-(16+Math.random()*42),life:0.38+Math.random()*0.32,t:0,sz:1+Math.random()*1.8}); } } }
+  const carY=0.685*H, cx=(hudLineX?hudLineX(W*0.5,carY):W*0.5);
+  if(speedKmh>15 && splash.length<180){ const n=Math.min(5,1+Math.round(speedKmh/28)); for(let k=0;k<n;k++){ for(const side of [-1,1]){ splash.push({x:cx+side*W*0.095,y:carY,vx:side*(8+Math.random()*28),vy:-(16+Math.random()*42),life:0.38+Math.random()*0.32,t:0,sz:1+Math.random()*1.8}); } } }
   for(let i=splash.length-1;i>=0;i--){ const p=splash[i]; p.t+=dt; if(p.t>=p.life){ splash.splice(i,1); continue; } p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=280*dt; const a=(1-p.t/p.life)*0.5; ctx.fillStyle='rgba(205,218,238,'+a.toFixed(3)+')'; ctx.beginPath(); ctx.arc(p.x,p.y,p.sz,0,Math.PI*2); ctx.fill(); }
   rainWasOn=true;
 }

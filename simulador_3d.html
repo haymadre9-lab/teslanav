@@ -43,6 +43,7 @@
   <div class="row">
     <button id="bDemo" class="g">▶ Demo</button>
     <button id="bQ">Calidad: alta</button>
+    <button id="bInt" style="display:none">Interior: sí</button>
     <label style="min-width:auto">Color</label><input id="col" type="color" value="#7d838c">
   </div>
 </div>
@@ -3780,7 +3781,8 @@ function updatePosts(){
 var yawG=new THREE.Group(); scene.add(yawG);
 var rollG=new THREE.Group(); rollG.rotation.order='ZXY'; yawG.add(rollG);
 var carHolder=new THREE.Group(); carHolder.rotation.y=Math.PI; rollG.add(carHolder); // el modelo mira a +z; la cámara mira a -z
-var wheels=[], bodyMats=[], tailMat=null, carReady=false, wheelRadius=0.34, wheelContact=[];
+var wheels=[], bodyMats=[], tailMat=null, carReady=false, wheelMarkers=[], interiorMeshes=[], triCount=0;
+function countTris(){ var n=0; carHolder.traverse(function(o){ if(o.isMesh&&o.visible&&o.geometry){ n+=(o.geometry.index?o.geometry.index.count:o.geometry.attributes.position.count)/3; } }); triCount=n; }
 
 // sombra "blob" bajo el coche
 (function(){ var c=document.createElement('canvas'); c.width=c.height=128; var g=c.getContext('2d'); var gr=g.createRadialGradient(64,64,6,64,64,62); gr.addColorStop(0,'rgba(0,0,0,0.65)'); gr.addColorStop(1,'rgba(0,0,0,0)'); g.fillStyle=gr; g.fillRect(0,0,128,128);
@@ -3788,23 +3790,26 @@ var wheels=[], bodyMats=[], tailMat=null, carReady=false, wheelRadius=0.34, whee
   m.rotation.x=-Math.PI/2; m.position.y=0.015; yawG.add(m); })();
 
 function b64ToBuf(b64){ var bin=atob(b64), n=bin.length, u=new Uint8Array(n); for(var i=0;i<n;i++)u[i]=bin.charCodeAt(i); return u.buffer; }
-var tris=0;
+/*LOAD_START*/
 new THREE.GLTFLoader().parse(b64ToBuf(GLB_B64),'',function(gltf){
   var model=gltf.scene; model.updateMatrixWorld(true);
-  model.traverse(function(o){ if(o.isMesh){ tris+=(o.geometry.index?o.geometry.index.count:o.geometry.attributes.position.count)/3; o.frustumCulled=true;
-      var m=o.material; if(m){ if(m.name==='Body'||m.name==='Material.005'){ m.metalness=0.15; m.roughness=0.28; bodyMats.push(m); }
+  model.traverse(function(o){ if(o.isMesh){ o.frustumCulled=true;
+      var m=o.material; if(m){ if(m.name==='Body'||m.name==='Material.005'){ m.metalness=0.15; m.roughness=0.28; if(bodyMats.indexOf(m)<0)bodyMats.push(m); }
         if(m.name==='Tail_Light'){ tailMat=m; m.emissive=new THREE.Color(0xff0000); m.emissiveIntensity=0.35; }
         if(m.name==='Glass'||m.name==='Front_Light_Glass'){ m.roughness=0.05; } } } });
   // ruedas: giran alrededor del eje local Y de su nodo (en el modelo ese eje apunta a +X)
   ['Cube001_1','Cube003_3'].forEach(function(nm){ var node=model.getObjectByName(nm); if(!node)return;
     var wp=new THREE.Vector3(); node.getWorldPosition(wp);
-    node.children.forEach(function(ch){ wheels.push({o:ch,r:Math.max(0.2,wp.y)}); });
-    if(nm==='Cube001_1'){ wheelContact=[new THREE.Vector3(-0.8,0,wp.z),new THREE.Vector3(0.8,0,wp.z)]; } });
+    node.children.forEach(function(ch){ wheels.push({o:ch,r:Math.max(0.2,wp.y),axis:'y'}); });
+    if(nm==='Cube001_1'){ [-1,1].forEach(function(sd){ var mk=new THREE.Object3D(); mk.position.set(sd*0.8,0,wp.z); mk.userData.side=sd; model.add(mk); wheelMarkers.push(mk); }); } });
   carHolder.add(model);
-  var box=new THREE.Box3().setFromObject(model); carHolder.position.set(-(box.min.x+box.max.x)/2,0,-(box.min.z+box.max.z)/2);
-  setBodyColor($('col').value);
+  var bodyObj=null; model.traverse(function(o){ if(o.isMesh&&o.material&&o.material.name==='Body')bodyObj=o; });
+  var box=new THREE.Box3(), vv=new THREE.Vector3(); (function(){ var o=bodyObj; if(!o)return; var p=o.geometry.attributes.position; for(var i=0;i<p.count;i++){ vv.fromBufferAttribute(p,i).applyMatrix4(o.matrixWorld); box.expandByPoint(vv); } })(); if(box.isEmpty()) box.setFromObject(model);
+  carHolder.position.set((box.min.x+box.max.x)/2,0,(box.min.z+box.max.z)/2); // el holder está girado 180°, por eso el signo
+  setBodyColor($('col').value); countTris();
   carReady=true; $('msg').style.display='none';
 },function(err){ $('msg').textContent='Error al leer el modelo 3D: '+(err&&err.message||err); });
+/*LOAD_END*/
 
 function setBodyColor(hex){ for(var i=0;i<bodyMats.length;i++) bodyMats[i].color.set(hex); }
 $('col').addEventListener('input',function(e){ setBodyColor(e.target.value); });
@@ -3827,9 +3832,9 @@ function drawRain(dt){
   rainX.strokeStyle='rgba(180,200,230,.45)'; rainX.lineWidth=1.5; var slant=0.16;
   for(var n=0;n<drops.length;n++){ var d=drops[n]; d.y+=d.s*dt*1.7; d.x+=slant*d.s*dt*0.3; if(d.y>1.05){d.y=-0.05;d.x=Math.random();} var x=d.x*W,y=d.y*H,len=d.l*H; rainX.beginPath(); rainX.moveTo(x,y); rainX.lineTo(x-slant*len,y+len); rainX.stroke(); }
   // salpicadura desde las ruedas traseras reales (proyección 3D -> pantalla)
-  if(carReady && wheelContact.length && state.speed>15 && splash.length<180){
-    var cnt=Math.min(5,1+Math.round(state.speed/28));
-    for(var w=0;w<wheelContact.length;w++){ var v=wheelContact[w].clone(); carHolder.localToWorld(v); v.project(camera); var sx=(v.x*0.5+0.5)*W, sy=(-v.y*0.5+0.5)*H, side=wheelContact[w].x<0?-1:1;
+  if(carReady && wheelMarkers.length && state.speed>15 && splash.length<180){
+    var cnt=Math.min(5,1+Math.round(state.speed/28)), v=new THREE.Vector3();
+    for(var w=0;w<wheelMarkers.length;w++){ wheelMarkers[w].getWorldPosition(v); v.project(camera); var sx=(v.x*0.5+0.5)*W, sy=(-v.y*0.5+0.5)*H, side=wheelMarkers[w].userData.side;
       for(var k=0;k<cnt;k++) splash.push({x:sx,y:sy,vx:side*(8+Math.random()*28),vy:-(16+Math.random()*42),life:0.38+Math.random()*0.32,t:0,sz:1+Math.random()*1.8}); } }
   for(var i2=splash.length-1;i2>=0;i2--){ var p=splash[i2]; p.t+=dt; if(p.t>=p.life){splash.splice(i2,1);continue;} p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=280*dt; var a=(1-p.t/p.life)*0.5; rainX.fillStyle='rgba(205,218,238,'+a.toFixed(3)+')'; rainX.beginPath(); rainX.arc(p.x,p.y,p.sz,0,Math.PI*2); rainX.fill(); }
 }
@@ -3879,7 +3884,7 @@ function frame(now){
   bob+=dt*(6+v*0.35);
   yawG.rotation.y=-yaw; rollG.rotation.z=roll; rollG.rotation.x=pitch; rollG.position.y=(v>1?Math.sin(bob)*0.004*Math.min(1,v/15):0);
   // ruedas
-  if(carReady){ var da=v*dt; for(var i=0;i<wheels.length;i++){ wheels[i].o.rotation.y+=da/wheels[i].r; }
+  if(carReady){ var da=v*dt; for(var i=0;i<wheels.length;i++){ wheels[i].o.rotation[wheels[i].axis]+=da/wheels[i].r; }
     if(tailMat) tailMat.emissiveIntensity=state.brake?3.2:(state.night?1.0:0.35); }
   // cámara: mira algo hacia la curva para que se vea, sin perder el coche
   look+=((clamp(k*320,-7,7))*0.35-look)*Math.min(1,dt*3);
@@ -3888,7 +3893,7 @@ function frame(now){
   drawRain(dt);
   $('spd').textContent=Math.round(state.speed);
   fpsN++; fpsT+=dt; if(fpsT>=0.5){ fps=Math.round(fpsN/fpsT); fpsN=0; fpsT=0;
-    $('info').innerHTML=fps+' FPS<br>'+Math.round(tris).toLocaleString('es-ES')+' triángulos del coche<br>'+renderer.info.render.calls+' draw calls'; }
+    $('info').innerHTML=fps+' FPS<br>'+Math.round(triCount).toLocaleString('es-ES')+' triángulos del coche<br>'+renderer.info.render.calls+' draw calls'; }
   requestAnimationFrame(frame);
 }
 resizeAll(); setNight(false); updateRoad(); updatePosts();

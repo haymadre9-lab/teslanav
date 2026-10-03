@@ -197,7 +197,7 @@
 'use strict';
 
 /* ============================================================
-   ESTADO GLOBAL
+   ESTADO GLOBAL (Autoboard lo lee aquí)
    ============================================================ */
 window.TESLA_STATE = {
   speed: 0, speedMs: 0, curvature: 0, heading: 0,
@@ -213,7 +213,6 @@ const $ = (id)=>document.getElementById(id);
 const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
 const lerp  = (a,b,t)=>a+(b-a)*t;
 const wrapPi = (a)=>{ while(a>Math.PI) a-=Math.PI*2; while(a<-Math.PI) a+=Math.PI*2; return a; };
-const rand  = (a,b)=>a+Math.random()*(b-a);
 
 /* ============================================================
    RENDERER / ESCENA / CÁMARA
@@ -228,10 +227,11 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.1;
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0x1a2540, 120, 480);
+scene.fog = new THREE.Fog(0x1a2540, 100, 400);
 
-const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 1200);
+const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 1000);
 
+// El mundo entero se mueve. El coche está fijo en (0,0,0).
 const worldGroup = new THREE.Group();
 scene.add(worldGroup);
 
@@ -270,28 +270,19 @@ function makeAsphaltTexture(){
   const s = 512;
   const c = document.createElement('canvas'); c.width=s; c.height=s;
   const ctx = c.getContext('2d');
-  ctx.fillStyle = '#4a5058'; ctx.fillRect(0,0,s,s);
+  ctx.fillStyle = '#3a4048'; ctx.fillRect(0,0,s,s);
   const img = ctx.getImageData(0,0,s,s);
   const d = img.data;
   for(let i=0;i<d.length;i+=4){
-    const n = (Math.random()*60)|0;
-    d[i]   = clamp(d[i]+n-30, 0, 255);
-    d[i+1] = clamp(d[i+1]+n-30, 0, 255);
-    d[i+2] = clamp(d[i+2]+n-30, 0, 255);
+    const n = (Math.random()*50)|0;
+    d[i]   = clamp(d[i]+n-25, 0, 255);
+    d[i+1] = clamp(d[i+1]+n-25, 0, 255);
+    d[i+2] = clamp(d[i+2]+n-25, 0, 255);
   }
   ctx.putImageData(img,0,0);
-  for(let i=0;i<120;i++){
-    const x=Math.random()*s, y=Math.random()*s;
-    const r=Math.random()*24+3;
-    const g=ctx.createRadialGradient(x,y,0,x,y,r);
-    const a=Math.random()*0.05;
-    g.addColorStop(0, `rgba(0,0,0,${a})`);
-    g.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
-  }
   for(let i=0;i<250;i++){
     const x=Math.random()*s, y=Math.random()*s;
-    ctx.fillStyle = `rgba(255,255,255,${Math.random()*0.08})`;
+    ctx.fillStyle = `rgba(255,255,255,${Math.random()*0.06})`;
     ctx.fillRect(x,y,1,1);
   }
   const tex = new THREE.CanvasTexture(c);
@@ -303,63 +294,61 @@ function makeAsphaltTexture(){
   return tex;
 }
 
-function makeRoughnessTexture(){
-  const s = 256;
-  const c = document.createElement('canvas'); c.width=s; c.height=s;
-  const ctx = c.getContext('2d');
-  ctx.fillStyle = '#b0b0b0'; ctx.fillRect(0,0,s,s);
-  for(let i=0;i<2000;i++){
-    const x=Math.random()*s, y=Math.random()*s;
-    const v = 160 + (Math.random()*70|0);
-    ctx.fillStyle = `rgb(${v},${v},${v})`;
-    ctx.fillRect(x,y, 1+(Math.random()*2|0), 1+(Math.random()*2|0));
-  }
-  const tex = new THREE.CanvasTexture(c);
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  return tex;
-}
-
 function makeGroundTexture(){
   const s = 256;
   const c = document.createElement('canvas'); c.width=s; c.height=s;
   const ctx = c.getContext('2d');
-  ctx.fillStyle = '#20242c'; ctx.fillRect(0,0,s,s);
+  ctx.fillStyle = '#181c24'; ctx.fillRect(0,0,s,s);
   for(let i=0;i<1200;i++){
     const x=Math.random()*s, y=Math.random()*s;
-    const v = 35 + (Math.random()*30|0);
-    ctx.fillStyle = `rgb(${v},${v},${v+5})`;
+    const v = 25 + (Math.random()*20|0);
+    ctx.fillStyle = `rgb(${v},${v},${v+4})`;
     ctx.fillRect(x,y,1+(Math.random()*2|0),1+(Math.random()*2|0));
   }
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(80, 80);
+  tex.repeat.set(60, 60);
   tex.encoding = THREE.sRGBEncoding;
   return tex;
 }
 
 const asphaltTex = makeAsphaltTexture();
-const roughTex   = makeRoughnessTexture();
 const groundTex  = makeGroundTexture();
 
 /* ============================================================
    CARRETERA PROCEDURAL INFINITA
+   ------------------------------------------------------------
+   Idea: los segmentos se generan por delante del coche (que está
+   fijo en 0,0,0). Cada segmento tiene un yaw. El coche SIEMPRE
+   está en el segmento "central" y su heading es el yaw de ese
+   segmento. La curvatura del volante modifica el yaw de los
+   NUEVOS segmentos.
    ============================================================ */
-const SEG_LEN = 2.0;
-const SEG_COUNT = 260;
-const LANE_WIDTH = 3.6;
-let currentLanes = 3;
-const halfWidth = (currentLanes * LANE_WIDTH) / 2;
-const CAR_LATERAL_OFFSET = LANE_WIDTH;   // carril derecho
+const SEG_LEN      = 2.0;        // longitud de cada segmento
+const SEG_COUNT    = 200;        // segmentos vivos
+const LANE_WIDTH   = 3.6;
+const LANES        = 3;
+const HALF_WIDTH   = (LANES * LANE_WIDTH) / 2;   // 5.4 m
+const CAR_OFFSET   = LANE_WIDTH;                 // coche en carril derecho
 
+// Distancia por delante/detrás que queremos cubrir
+const AHEAD_DIST   = SEG_COUNT * SEG_LEN * 0.75; // 300 m por delante
+const BEHIND_DIST  = SEG_COUNT * SEG_LEN * 0.25; // 100 m por detrás
+
+// Anillo de segmentos. segmentos[head] es el más nuevo.
 const segments = [];
 let headIdx = 0;
-let tailIdx = 0;
-let generatedCount = 0;
 
+// Estado de generación: dónde está el "cursor" de generación
 let genX = 0, genZ = 0, genYaw = 0;
-let roadBend = 0;
-let roadBendTarget = 0;
+// Estado del coche sobre la carretera (en metros recorridos desde el origen)
+let carS = BEHIND_DIST;
 
+// Curvatura suavizada (la que se aplica a nuevos segmentos)
+let bendCurrent = 0;
+let bendTarget  = 0;
+
+// Buffers dinámicos para la malla de la carretera
 const roadMaxVerts = SEG_COUNT * 2;
 const roadPos = new Float32Array(roadMaxVerts * 3);
 const roadUV  = new Float32Array(roadMaxVerts * 2);
@@ -382,7 +371,6 @@ roadGeo.setIndex(roadIndices);
 const roadMat = new THREE.MeshStandardMaterial({
   color: 0xffffff,
   map: asphaltTex,
-  roughnessMap: roughTex,
   roughness: 0.85,
   metalness: 0.08,
   side: THREE.DoubleSide,
@@ -391,7 +379,8 @@ const roadMesh = new THREE.Mesh(roadGeo, roadMat);
 roadMesh.frustumCulled = false;
 worldGroup.add(roadMesh);
 
-function makeSideStrip(color, y, opacity){
+// Cintas (líneas) reutilizando el mismo patrón de índices
+function makeStrip(color, y, opacity){
   const posArr = new Float32Array(roadMaxVerts * 3);
   const geo = new THREE.BufferGeometry();
   const attr = new THREE.BufferAttribute(posArr, 3);
@@ -405,64 +394,18 @@ function makeSideStrip(color, y, opacity){
   return mesh;
 }
 
-const lineEdgeL = makeSideStrip(0xffffff, 0.02, 0.85);
-const lineEdgeR = makeSideStrip(0xffffff, 0.02, 0.85);
-const laneLineA = makeSideStrip(0xffffff, 0.025, 0.65);
-const laneLineB = makeSideStrip(0xffffff, 0.025, 0.65);
+const lineEdgeL = makeStrip(0xffffff, 0.02, 0.85);
+const lineEdgeR = makeStrip(0xffffff, 0.02, 0.85);
+const laneLineA = makeStrip(0xffffff, 0.03, 0.70);
+const laneLineB = makeStrip(0xffffff, 0.03, 0.70);
 
 worldGroup.add(lineEdgeL);
 worldGroup.add(lineEdgeR);
 worldGroup.add(laneLineA);
 worldGroup.add(laneLineB);
 
-const envGroup = new THREE.Group();
-worldGroup.add(envGroup);
-
 /* ============================================================
-   CIUDAD
-   ============================================================ */
-const BUILDING_COUNT = 45;
-const buildings = [];
-
-const buildingMat = new THREE.MeshBasicMaterial({
-  color: 0x39d98a, transparent: true, opacity: 0.10,
-  depthWrite: false, side: THREE.DoubleSide,
-});
-const buildingMatAlt = new THREE.MeshBasicMaterial({
-  color: 0x6ec6ff, transparent: true, opacity: 0.08,
-  depthWrite: false, side: THREE.DoubleSide,
-});
-const edgeMat = new THREE.LineBasicMaterial({
-  color: 0x39d98a, transparent: true, opacity: 0.75,
-});
-
-function makeBuilding(){
-  const g = new THREE.Group();
-  const h = rand(12, 55);
-  const w = rand(6, 14);
-  const d = rand(6, 14);
-  const geo = new THREE.BoxGeometry(w, h, d);
-  const mat = Math.random() < 0.6 ? buildingMat : buildingMatAlt;
-  const box = new THREE.Mesh(geo, mat);
-  box.position.y = h/2;
-  g.add(box);
-  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat);
-  edges.position.y = h/2;
-  g.add(edges);
-  g.userData.w = w;
-  g.userData.d = d;
-  g.userData.h = h;
-  return g;
-}
-
-for(let i=0;i<BUILDING_COUNT;i++){
-  const b = makeBuilding();
-  buildings.push(b);
-  envGroup.add(b);
-}
-
-/* ============================================================
-   SUELO
+   SUELO (plano grande, se mueve con el mundo)
    ============================================================ */
 const ground = new THREE.Mesh(
   new THREE.PlaneGeometry(3000, 3000),
@@ -473,16 +416,17 @@ ground.position.y = -0.06;
 scene.add(ground);
 
 /* ============================================================
-   COCHE
+   COCHE (fijo en el origen, dentro de worldGroup NO; en scene)
    ============================================================ */
 const carGroup = new THREE.Group();
 const carBody  = new THREE.Group();
 carGroup.add(carBody);
 scene.add(carGroup);
 
+// Mancha de sombra falsa debajo del coche
 const shadowBlob = new THREE.Mesh(
   new THREE.PlaneGeometry(5.2, 2.6),
-  new THREE.MeshBasicMaterial({ color:0x000000, transparent:true, opacity:0.30, depthWrite:false })
+  new THREE.MeshBasicMaterial({ color:0x000000, transparent:true, opacity:0.35, depthWrite:false })
 );
 shadowBlob.rotation.x = -Math.PI/2;
 shadowBlob.position.y = 0.03;
@@ -493,58 +437,48 @@ const wheels = { fl:null, fr:null, rl:null, rr:null };
 let bodyMaterial = null;
 const WHEEL_RE = /(wheel|tire|tyre|rueda|llanta|neumatic|pneu|roue|rad)/i;
 
-// Rotación ajustable del modelo. Cambia esto si tu GLB mira hacia otro lado.
-// Valores típicos: 0, Math.PI/2, Math.PI, -Math.PI/2
+// Ajustes de orientación del modelo. Si sale mal, cambia estos valores.
 let CAR_MODEL_YAW_OFFSET = 0;
-// Auto-ajuste: si el coche aparece muy bajo o muy alto, ajusta este offset en metros
-let CAR_MODEL_Y_OFFSET = 0;
+let CAR_MODEL_Y_OFFSET   = 0;
+let CAR_MODEL_X_OFFSET   = 0;
 
 function setupCar(gltf){
   carModel = gltf.scene;
 
-  // Escalar al tamaño "real" (4.6 m de largo como máximo)
+  // 1) Escalar el coche a ~4.6 m de largo
   const box = new THREE.Box3().setFromObject(carModel);
   const size = new THREE.Vector3(); box.getSize(size);
   const maxDim = Math.max(size.x, size.y, size.z);
   const scale = 4.6 / maxDim;
   carModel.scale.setScalar(scale);
 
-  // Aplicar rotación antes de centrar
+  // 2) Rotación de orientación
   carModel.rotation.y = CAR_MODEL_YAW_OFFSET;
   carModel.updateMatrixWorld(true);
 
-  // Recentrar en el origen
+  // 3) Recentrar: el origen del coche debe quedar en el centro de su base
   const box2 = new THREE.Box3().setFromObject(carModel);
   const center = new THREE.Vector3(); box2.getCenter(center);
   carModel.position.x -= center.x;
   carModel.position.z -= center.z;
-  carModel.position.y -= box2.min.y;
+  carModel.position.y -= box2.min.y;   // apoyar sobre el suelo
+  carModel.position.x += CAR_MODEL_X_OFFSET;
   carModel.position.y += CAR_MODEL_Y_OFFSET;
 
-  // Detectar materiales de carrocería (varias estrategias)
+  // 4) Detectar materiales y ruedas
   let bestBodyMat = null;
-  let bestBodyArea = 0;
-  const allStdMats = [];
-
   carModel.traverse(o=>{
     if(o.isMesh){
-      o.castShadow = false;
-      o.receiveShadow = false;
+      o.castShadow = false; o.receiveShadow = false;
       if(o.material){
         const mats = Array.isArray(o.material)?o.material:[o.material];
         mats.forEach(m=>{
-          // Candidato 1: nombre del material
-          if(m.name && /body|paint|carroceria|shell/i.test(m.name) && !bestBodyMat){
+          if(!bestBodyMat && m.name && /body|paint|carroceria|shell/i.test(m.name)){
             bestBodyMat = m;
-          }
-          // Candidato 2: el material Standard más grande
-          if(m.isMeshStandardMaterial || m.isMeshPhysicalMaterial){
-            allStdMats.push({m, mesh:o});
           }
         });
       }
     }
-    // Detección de ruedas
     if(o.name && WHEEL_RE.test(o.name)){
       const wp = new THREE.Vector3();
       o.getWorldPosition(wp);
@@ -560,24 +494,21 @@ function setupCar(gltf){
     }
   });
 
-  // Si no encontramos por nombre, usamos el Standard más grande
-  if(!bestBodyMat && allStdMats.length){
-    // Elegimos el que tenga más triángulos
-    allStdMats.sort((a,b)=>{
-      const ga = a.mesh.geometry.index ? a.mesh.geometry.index.count : a.mesh.geometry.attributes.position.count;
-      const gb = b.mesh.geometry.index ? b.mesh.geometry.index.count : b.mesh.geometry.attributes.position.count;
-      return gb - ga;
+  // Fallback: primer Standard con color
+  if(!bestBodyMat){
+    carModel.traverse(o=>{
+      if(bestBodyMat) return;
+      if(o.isMesh && o.material && (o.material.isMeshStandardMaterial || o.material.isMeshPhysicalMaterial)){
+        bestBodyMat = o.material;
+      }
     });
-    bestBodyMat = allStdMats[0].m;
   }
   bodyMaterial = bestBodyMat;
-
-  // Pintar el color inicial
   if(bodyMaterial && bodyMaterial.color){
     bodyMaterial.color.set($('col').value);
   }
 
-  // Log de nodos para depurar
+  // Log de nodos (útil para depurar)
   console.log('=== Nodos del coche ===');
   carModel.traverse(o=>{
     if(o.isMesh){
@@ -594,7 +525,6 @@ function setupCar(gltf){
   $('msg').style.display = 'none';
 }
 
-// Carga del GLB con timeout
 let loadTimeout = setTimeout(()=>{
   if(!window.TESLA_STATE.loaded){
     $('msgTxt').textContent = 'No se pudo cargar car.glb (revisa la consola)';
@@ -620,102 +550,153 @@ loader.load('./car.glb',
 
 /* ============================================================
    GENERACIÓN DE SEGMENTOS
+   ------------------------------------------------------------
+   Los segmentos se generan POR DELANTE del coche (que está fijo).
+   Al generarlos, avanzamos el "cursor" (genX,genZ,genYaw).
+   Los viejos se van reciclando del anillo.
    ============================================================ */
+function makeSeg(){ return { x:0, z:0, yaw:0 }; }
+
 function initRoad(){
   segments.length = 0;
+  for(let i=0;i<SEG_COUNT;i++) segments.push(makeSeg());
+  headIdx = SEG_COUNT - 1;
   genX = 0; genZ = 0; genYaw = 0;
+  // Generamos desde muy atrás hasta muy adelante, cubriendo AHEAD+BEHIND
+  const totalLen = SEG_COUNT * SEG_LEN;
   for(let i=0;i<SEG_COUNT;i++){
-    segments.push({ cx: genX, cz: genZ, yaw: genYaw });
+    const seg = segments[i];
+    seg.x = genX; seg.z = genZ; seg.yaw = genYaw;
     genX += Math.sin(genYaw) * SEG_LEN;
     genZ += Math.cos(genYaw) * SEG_LEN;
   }
-  headIdx = SEG_COUNT - 1;
-  tailIdx = 0;
-  generatedCount = SEG_COUNT;
-  updateRoadMesh();
-  updateCity();
+  rebuildRoadMesh();
 }
 
 function pushSegment(){
   headIdx = (headIdx + 1) % SEG_COUNT;
-  genYaw += roadBend * SEG_LEN;
+  // El nuevo segmento se genera delante del último generado, con el bend actual
+  genYaw += bendCurrent * SEG_LEN;
   genX += Math.sin(genYaw) * SEG_LEN;
   genZ += Math.cos(genYaw) * SEG_LEN;
-  segments[headIdx] = { cx: genX, cz: genZ, yaw: genYaw };
-  generatedCount++;
-  tailIdx = (tailIdx + 1) % SEG_COUNT;
+  const seg = segments[headIdx];
+  seg.x = genX; seg.z = genZ; seg.yaw = genYaw;
 }
 
-function segAt(i){
-  return segments[(tailIdx + i) % SEG_COUNT];
+// Devuelve el índice de anillo del segmento i-ésimo (0 = el más antiguo)
+function segAt(i){ return segments[(headIdx - (SEG_COUNT - 1) + i + SEG_COUNT*2) % SEG_COUNT]; }
+
+// Posición del coche en función de carS (metros recorridos).
+// El coche está en el origen, y su heading se calcula por la carretera.
+const _carSample = { x:0, z:0, yaw:0 };
+function sampleRoadAt(s){
+  // s = distancia en metros desde el origen de generación
+  // El segmento 0 está en s=0. El segmento i está en s = i*SEG_LEN.
+  // Pero como el coche está fijo y el mundo se mueve, en realidad
+  // lo que necesitamos es: dado que el coche avanza `ds` metros,
+  // avanzamos los segmentos y recolocamos la malla.
+  // Aquí devolvemos la pose del segmento "bajo el coche" (índice fijo).
+  return _carSample;
 }
 
-function updateRoadMesh(){
-  const hw = halfWidth;
+/* ============================================================
+   REBUILD DE LA MALLA
+   ------------------------------------------------------------
+   Los segmentos vivos se dibujan en worldGroup. Como el coche
+   está en el origen, y queremos que el segmento "bajo el coche"
+   sea siempre el mismo índice (por ejemplo SEG_COUNT*0.25),
+   desplazamos toda la malla para que ese segmento quede en 0,0.
+   ============================================================ */
+const CAR_SEG_IDX = Math.floor(SEG_COUNT * 0.25); // índice del segmento bajo el coche
+
+function rebuildRoadMesh(){
+  const anchor = segAt(CAR_SEG_IDX);
+  const ax = anchor.x, az = anchor.z, ayaw = anchor.yaw;
+  // Rotamos y trasladamos para que el ancla quede en (0,0,0) con yaw 0
+  const cos = Math.cos(-ayaw);
+  const sin = Math.sin(-ayaw);
+
   let vi = 0;
   for(let i=0;i<SEG_COUNT;i++){
     const s = segAt(i);
-    const px = Math.cos(s.yaw);
-    const pz = -Math.sin(s.yaw);
-    roadPos[vi*3+0] = s.cx - px*hw;
-    roadPos[vi*3+1] = 0.0;
-    roadPos[vi*3+2] = s.cz - pz*hw;
-    roadUV[vi*2+0] = 0;
-    roadUV[vi*2+1] = i*0.35;
+    // Vector desde el ancla
+    let dx = s.x - ax;
+    let dz = s.z - az;
+    // Rotar
+    const rx = dx * cos - dz * sin;
+    const rz = dx * sin + dz * cos;
+    // Perpendicular
+    const px = Math.cos(s.yaw - ayaw);
+    const pz = -Math.sin(s.yaw - ayaw);
+
+    const leftX  = rx - px * HALF_WIDTH;
+    const leftZ  = rz - pz * HALF_WIDTH;
+    const rightX = rx + px * HALF_WIDTH;
+    const rightZ = rz + pz * HALF_WIDTH;
+
+    roadPos[vi*3+0] = leftX;  roadPos[vi*3+1] = 0; roadPos[vi*3+2] = leftZ;
+    roadUV[vi*2+0] = 0; roadUV[vi*2+1] = i*0.35;
     vi++;
-    roadPos[vi*3+0] = s.cx + px*hw;
-    roadPos[vi*3+1] = 0.0;
-    roadPos[vi*3+2] = s.cz + pz*hw;
-    roadUV[vi*2+0] = 1;
-    roadUV[vi*2+1] = i*0.35;
+    roadPos[vi*3+0] = rightX; roadPos[vi*3+1] = 0; roadPos[vi*3+2] = rightZ;
+    roadUV[vi*2+0] = 1; roadUV[vi*2+1] = i*0.35;
     vi++;
   }
   roadPosAttr.needsUpdate = true;
   roadUVAttr.needsUpdate = true;
 
-  updateLaneStrip(lineEdgeL, -hw + 0.15, 0.08);
-  updateLaneStrip(lineEdgeR,  hw - 0.15, 0.08);
-  updateDashedStrip(laneLineA, -hw + LANE_WIDTH, 0.06);
-  updateDashedStrip(laneLineB,  hw - LANE_WIDTH, 0.06);
+  updateStripMapped(lineEdgeL, -HALF_WIDTH + 0.15, 0.08, ax, az, ayaw);
+  updateStripMapped(lineEdgeR,  HALF_WIDTH - 0.15, 0.08, ax, az, ayaw);
+  updateDashedMapped(laneLineA, -HALF_WIDTH + LANE_WIDTH, 0.06, ax, az, ayaw);
+  updateDashedMapped(laneLineB,  HALF_WIDTH - LANE_WIDTH, 0.06, ax, az, ayaw);
 }
 
-function updateLaneStrip(mesh, centerOffset, halfLineWidth){
+function updateStripMapped(mesh, centerOffset, halfLineWidth, ax, az, ayaw){
   const arr = mesh.geometry.attributes.position.array;
+  const cos = Math.cos(-ayaw);
+  const sin = Math.sin(-ayaw);
   let vi = 0;
   for(let i=0;i<SEG_COUNT;i++){
     const s = segAt(i);
-    const px = Math.cos(s.yaw);
-    const pz = -Math.sin(s.yaw);
-    arr[vi*3+0] = s.cx + px*(centerOffset - halfLineWidth);
+    const dx = s.x - ax, dz = s.z - az;
+    const rx = dx * cos - dz * sin;
+    const rz = dx * sin + dz * cos;
+    const px = Math.cos(s.yaw - ayaw);
+    const pz = -Math.sin(s.yaw - ayaw);
+    arr[vi*3+0] = rx + px * (centerOffset - halfLineWidth);
     arr[vi*3+1] = mesh.userData.y;
-    arr[vi*3+2] = s.cz + pz*(centerOffset - halfLineWidth);
+    arr[vi*3+2] = rz + pz * (centerOffset - halfLineWidth);
     vi++;
-    arr[vi*3+0] = s.cx + px*(centerOffset + halfLineWidth);
+    arr[vi*3+0] = rx + px * (centerOffset + halfLineWidth);
     arr[vi*3+1] = mesh.userData.y;
-    arr[vi*3+2] = s.cz + pz*(centerOffset + halfLineWidth);
+    arr[vi*3+2] = rz + pz * (centerOffset + halfLineWidth);
     vi++;
   }
   mesh.geometry.attributes.position.needsUpdate = true;
 }
 
-function updateDashedStrip(mesh, centerOffset, halfLineWidth){
+function updateDashedMapped(mesh, centerOffset, halfLineWidth, ax, az, ayaw){
   const arr = mesh.geometry.attributes.position.array;
+  const cos = Math.cos(-ayaw);
+  const sin = Math.sin(-ayaw);
   let vi = 0;
   const halfDash = SEG_LEN * 0.5;
   for(let i=0;i<SEG_COUNT-1;i+=2){
     const s0 = segAt(i);
     const s1 = segAt(i+1);
-    const midx = (s0.cx + s1.cx)*0.5;
-    const midz = (s0.cz + s1.cz)*0.5;
+    const midx = (s0.x + s1.x)*0.5;
+    const midz = (s0.z + s1.z)*0.5;
     const yaw  = s0.yaw;
-    const px = Math.cos(yaw);
-    const pz = -Math.sin(yaw);
-    const dx = Math.sin(yaw);
-    const dz = Math.cos(yaw);
-    const bx = midx - dx*halfDash;
-    const bz = midz - dz*halfDash;
-    const fx = midx + dx*halfDash;
-    const fz = midz + dz*halfDash;
+    const dx = midx - ax, dz = midz - az;
+    const rx = dx * cos - dz * sin;
+    const rz = dx * sin + dz * cos;
+    const px = Math.cos(yaw - ayaw);
+    const pz = -Math.sin(yaw - ayaw);
+    const fdx = Math.sin(yaw - ayaw);
+    const fdz = Math.cos(yaw - ayaw);
+    const bx = rx - fdx*halfDash;
+    const bz = rz - fdz*halfDash;
+    const fx = rx + fdx*halfDash;
+    const fz = rz + fdz*halfDash;
     arr[vi*3+0] = bx + px*(centerOffset - halfLineWidth);
     arr[vi*3+1] = mesh.userData.y;
     arr[vi*3+2] = bz + pz*(centerOffset - halfLineWidth);
@@ -738,33 +719,7 @@ function updateDashedStrip(mesh, centerOffset, halfLineWidth){
 }
 
 /* ============================================================
-   COLOCACIÓN DE EDIFICIOS
-   ============================================================ */
-function updateCity(){
-  let idx = 0;
-  const hw = halfWidth;
-  for(let i=6; i<SEG_COUNT-6 && idx < buildings.length; i+=14){
-    const s = segAt(i);
-    const px = Math.cos(s.yaw);
-    const pz = -Math.sin(s.yaw);
-    const b = buildings[idx++];
-    const off = hw + 6 + rand(-1.5, 3.5);
-    b.position.set(s.cx - px*off, 0, s.cz - pz*off);
-    b.rotation.y = s.yaw + rand(-0.15, 0.15);
-  }
-  for(let i=13; i<SEG_COUNT-6 && idx < buildings.length; i+=14){
-    const s = segAt(i);
-    const px = Math.cos(s.yaw);
-    const pz = -Math.sin(s.yaw);
-    const b = buildings[idx++];
-    const off = hw + 6 + rand(-1.5, 3.5);
-    b.position.set(s.cx + px*off, 0, s.cz + pz*off);
-    b.rotation.y = s.yaw + rand(-0.15, 0.15);
-  }
-}
-
-/* ============================================================
-   CONDUCCIÓN — MODELO: el coche sigue la carretera
+   CONDUCCIÓN (coche fijo, mundo desplazado)
    ============================================================ */
 const drive = {
   speed: 80/3.6,
@@ -772,13 +727,11 @@ const drive = {
   steer: 0,
   steerSmooth: 0,
   braking: false,
-  heading: 0,
   curvature: 0,
   pitch: 0,
   roll: 0,
   totalDistance: 0,
-  // Progreso sobre la carretera: índice de segmento + fracción
-  roadS: 0,           // metros recorridos desde el segmento 0
+  heading: 0,        // heading actual del coche (yaw del segmento ancla)
 };
 
 let demoOn = false;
@@ -791,34 +744,9 @@ let gpsEnabled = false;
 let gpsActive = false;
 const gpsSimBase = { lat: 40.4168, lon: -3.7038 };
 
-// Devuelve la posición y el yaw en un punto s (metros) sobre la carretera
-function roadPointAt(s, out){
-  const idx = Math.floor(s / SEG_LEN);
-  const frac = (s / SEG_LEN) - idx;
-  const s0 = segAt(idx);
-  const s1 = segAt(idx + 1 >= SEG_COUNT ? SEG_COUNT - 1 : idx + 1);
-  // Interpolamos
-  const cx = lerp(s0.cx, s1.cx, frac);
-  const cz = lerp(s0.cz, s1.cz, frac);
-  const yaw = s0.yaw + wrapPi(s1.yaw - s0.yaw) * frac;
-  out.cx = cx;
-  out.cz = cz;
-  out.yaw = yaw;
-  return out;
-}
-
-// Posición del coche al inicio de la carretera
-function resetCarToRoadStart(){
-  drive.roadS = SEG_COUNT * SEG_LEN * 0.5; // mitad de la carretera
-  // Colocar coche
-  const p = { cx:0, cz:0, yaw:0 };
-  roadPointAt(drive.roadS, p);
-  drive.heading = p.yaw;
-  carGroup.position.set(p.cx + Math.cos(p.yaw)*CAR_LATERAL_OFFSET, 0, p.cz - Math.sin(p.yaw)*CAR_LATERAL_OFFSET);
-  carGroup.rotation.y = p.yaw;
-}
-
-const _rp = { cx:0, cz:0, yaw:0 };
+// Distancia acumulada desde el último "tirón" de generación.
+// Cada vez que el coche avanza SEG_LEN, empujamos un segmento nuevo.
+let pushAccum = 0;
 
 function updateDrive(dt){
   if(demoOn){
@@ -841,60 +769,47 @@ function updateDrive(dt){
   drive.speed += (drive.targetSpeed - drive.speed) * (drive.braking ? 4*dt : 1.6*dt);
   drive.speed = Math.max(0, drive.speed);
 
-  // Volante
+  // Volante suavizado
   drive.steerSmooth = lerp(drive.steerSmooth, drive.steer, 1-Math.exp(-8*dt));
 
-  // La curvatura afecta SOLO a los nuevos segmentos
-  roadBendTarget = drive.steerSmooth * 0.020;
-  roadBend = lerp(roadBend, roadBendTarget, 1-Math.exp(-3*dt));
-  drive.curvature = clamp(roadBend * 3000, -100, 100);
+  // Curvatura: solo afecta a NUEVOS segmentos
+  bendTarget = drive.steerSmooth * 0.022;
+  bendCurrent = lerp(bendCurrent, bendTarget, 1-Math.exp(-3*dt));
+  drive.curvature = clamp(bendCurrent * 3000, -100, 100);
 
-  // *** EL COCHE AVANZA A LO LARGO DE LA CARRETERA ***
+  // Avance
   const ds = drive.speed * dt;
   drive.totalDistance += ds;
-  drive.roadS += ds;
+  pushAccum += ds;
 
-  // Generamos segmentos por delante del coche
-  const lastSeg = segments[headIdx];
-  const pNow = { cx:0, cz:0, yaw:0 };
-  roadPointAt(drive.roadS, pNow);
-  const distToHead = Math.hypot(lastSeg.cx - pNow.cx, lastSeg.cz - pNow.cz);
-  if(distToHead < 80){
-    for(let i=0;i<20;i++) pushSegment();
+  // Generamos segmentos a medida que el coche avanza
+  while(pushAccum >= SEG_LEN){
+    pushAccum -= SEG_LEN;
+    pushSegment();
   }
 
-  // Reciclamos segmentos que quedan muy por detrás
-  let safety = 0;
-  while(safety++ < SEG_COUNT){
-    const s = segAt(0);
-    const dx = s.cx - pNow.cx, dz = s.cz - pNow.cz;
-    if(Math.hypot(dx, dz) > 90){
-      tailIdx = (tailIdx + 1) % SEG_COUNT;
-      drive.roadS -= SEG_LEN;
-    } else break;
-  }
+  // Recalculamos la malla con el ancla en el segmento del coche
+  rebuildRoadMesh();
 
-  // Posición del coche sobre la carretera (interpolada)
-  roadPointAt(drive.roadS, _rp);
-  // El coche va en el carril derecho: offset perpendicular a la dirección de la carretera
-  const carPx = Math.cos(_rp.yaw);
-  const carPz = -Math.sin(_rp.yaw);
-  const carX = _rp.cx + carPx * CAR_LATERAL_OFFSET;
-  const carZ = _rp.cz + carPz * CAR_LATERAL_OFFSET;
-  carGroup.position.set(carX, 0, carZ);
-  carGroup.rotation.y = _rp.yaw;
-  drive.heading = _rp.yaw;
+  // El coche SIEMPRE está en el origen. Su heading es el yaw del segmento ancla.
+  const anchor = segAt(CAR_SEG_IDX);
+  const yaw = anchor.yaw;
+  drive.heading = yaw;
 
-  // Pitch / Roll visuales
-  drive.pitch = -drive.speed * 0.0035;
-  drive.roll  = clamp(drive.curvature * 0.006, -0.15, 0.15)
-              + drive.steerSmooth * 0.10;
-  carBody.rotation.z = lerp(carBody.rotation.z, drive.roll, 1-Math.exp(-6*dt));
-  carBody.rotation.x = lerp(carBody.rotation.x, drive.pitch, 1-Math.exp(-6*dt));
+  // Rotación del coche
+  carGroup.rotation.y = yaw;
+  carGroup.position.set(0, 0, 0);
+
+  // Roll y pitch MUY suaves (cosméticos)
+  const targetRoll  = clamp(drive.curvature * 0.0012, -0.045, 0.045)
+                    + drive.steerSmooth * 0.025;
+  const targetPitch = -drive.speed * 0.0015;
+  carBody.rotation.z = lerp(carBody.rotation.z, targetRoll,  1-Math.exp(-4*dt));
+  carBody.rotation.x = lerp(carBody.rotation.x, targetPitch, 1-Math.exp(-4*dt));
 
   // Ruedas: giro al rodar + dirección
-  const wheelSteer = drive.steerSmooth * 0.55;
-  const wheelSpin  = (drive.speed * dt) / 0.33; // radio 0.33m
+  const wheelSteer = drive.steerSmooth * 0.45;
+  const wheelSpin  = (drive.speed * dt) / 0.33;
   if(wheels.fl){
     wheels.fl.rotation.y = (wheels.fl.userData.baseRotY||0) + wheelSteer;
     wheels.fl.rotation.x = (wheels.fl.userData.baseRotX||0) + wheelSpin;
@@ -903,26 +818,14 @@ function updateDrive(dt){
     wheels.fr.rotation.y = (wheels.fr.userData.baseRotY||0) + wheelSteer;
     wheels.fr.rotation.x = (wheels.fr.userData.baseRotX||0) + wheelSpin;
   }
-  if(wheels.rl){
-    wheels.rl.rotation.x = (wheels.rl.userData.baseRotX||0) + wheelSpin;
-  }
-  if(wheels.rr){
-    wheels.rr.rotation.x = (wheels.rr.userData.baseRotX||0) + wheelSpin;
-  }
-
-  updateRoadMesh();
-  updateCity();
-
-  // Recentrado para precisión de float
-  if(drive.totalDistance > 5000){
-    recenterWorld();
-  }
+  if(wheels.rl){ wheels.rl.rotation.x = (wheels.rl.userData.baseRotX||0) + wheelSpin; }
+  if(wheels.rr){ wheels.rr.rotation.x = (wheels.rr.userData.baseRotX||0) + wheelSpin; }
 
   // Estado global
   window.TESLA_STATE.speed     = drive.speed * 3.6;
   window.TESLA_STATE.speedMs   = drive.speed;
   window.TESLA_STATE.curvature = drive.curvature;
-  window.TESLA_STATE.heading   = ((drive.heading * 180/Math.PI) + 360) % 360;
+  window.TESLA_STATE.heading   = ((yaw * 180/Math.PI) + 360) % 360;
   window.TESLA_STATE.steering  = drive.steerSmooth;
   window.TESLA_STATE.braking   = drive.braking;
   window.TESLA_STATE.raining   = raining;
@@ -932,14 +835,14 @@ function updateDrive(dt){
 
   // GPS simulado
   if(!gpsActive){
-    const latDelta = (drive.totalDistance / 111320) * Math.cos(drive.heading);
-    const lonDelta = (drive.totalDistance / (111320*Math.cos(gpsSimBase.lat*Math.PI/180))) * Math.sin(drive.heading);
+    const latDelta = (drive.totalDistance / 111320) * Math.cos(yaw);
+    const lonDelta = (drive.totalDistance / (111320*Math.cos(gpsSimBase.lat*Math.PI/180))) * Math.sin(yaw);
     window.TESLA_STATE.lat = gpsSimBase.lat + latDelta * 0.001;
     window.TESLA_STATE.lon = gpsSimBase.lon + lonDelta * 0.001;
   }
-  window.TESLA_STATE.gps.enabled = gpsEnabled;
+  window.TESLA_STATE.gps.enabled   = gpsEnabled;
   window.TESLA_STATE.gps.simulated = !gpsActive;
-  window.TESLA_STATE.gps.active = gpsActive;
+  window.TESLA_STATE.gps.active    = gpsActive;
 
   if(window.parent !== window){
     try{ window.parent.postMessage({type:'TESLA_STATE', payload: window.TESLA_STATE}, '*'); }catch(e){}
@@ -947,75 +850,32 @@ function updateDrive(dt){
 }
 
 /* ============================================================
-   RECENTRADO
+   CÁMARA (rígida al coche, sin lerps largos)
    ============================================================ */
-function recenterWorld(){
-  const p = { cx:0, cz:0, yaw:0 };
-  roadPointAt(drive.roadS, p);
-  const ox = p.cx, oz = p.cz;
-  for(let i=0;i<SEG_COUNT;i++){
-    const s = segments[i];
-    if(!s) continue;
-    s.cx -= ox;
-    s.cz -= oz;
-  }
-  genX -= ox;
-  genZ -= oz;
-  for(const b of buildings){
-    b.position.x -= ox;
-    b.position.z -= oz;
-  }
-  drive.totalDistance = 0;
-}
-
-/* ============================================================
-   CÁMARA
-   ============================================================ */
-let camRoll = 0, camRollTarget = 0;
+let camRoll = 0;
 let viewMode = 'chase';
-const camPosSmooth = new THREE.Vector3(0, 8, -14);
-const camLookAt = new THREE.Vector3();
+const camPos = new THREE.Vector3(0, 7, -12);
+const camLook = new THREE.Vector3();
 
 function updateCamera(dt){
   if(viewMode === 'chase'){
     const speedFactor = clamp(drive.speed / 40, 0, 1);
-    const dist  = lerp(11, 15, speedFactor);
-    const height= lerp(6.5, 8.0, speedFactor);
-    const back = new THREE.Vector3(-Math.sin(drive.heading), 0, -Math.cos(drive.heading));
-    const target = new THREE.Vector3(
-      carGroup.position.x + back.x * dist,
-      height,
-      carGroup.position.z + back.z * dist
-    );
-    camPosSmooth.lerp(target, 1-Math.exp(-6*dt));
-    camera.position.copy(camPosSmooth);
-
-    camLookAt.set(
-      carGroup.position.x + Math.sin(drive.heading) * 8,
-      1.2,
-      carGroup.position.z + Math.cos(drive.heading) * 8
-    );
-    camera.lookAt(camLookAt);
-    camRoll = lerp(camRoll, camRollTarget, 1-Math.exp(-4*dt));
+    const dist  = lerp(10, 14, speedFactor);
+    const height= lerp(5.5, 7.0, speedFactor);
+    // Cámara detrás del coche (el coche está en 0,0,0 mirando a +Z)
+    camPos.set(0, height, -dist);
+    camLook.set(0, 1.2, 8);
+    camera.position.copy(camPos);
+    camera.lookAt(camLook);
+    camRoll = lerp(camRoll, drive.curvature * 0.0015, 1-Math.exp(-4*dt));
     camera.rotateZ(camRoll);
   } else {
-    const fwd = new THREE.Vector3(Math.sin(drive.heading), 0, Math.cos(drive.heading));
-    const target = new THREE.Vector3(
-      carGroup.position.x + fwd.x * 0.2,
-      1.55,
-      carGroup.position.z + fwd.z * 0.2
-    );
-    camPosSmooth.lerp(target, 1-Math.exp(-10*dt));
-    camera.position.copy(camPosSmooth);
-    const lookAt = new THREE.Vector3(
-      carGroup.position.x + fwd.x * 12,
-      1.35,
-      carGroup.position.z + fwd.z * 12
-    );
-    camera.lookAt(lookAt);
-    camera.rotateZ(camRollTarget * 0.4);
+    // Vista conductor
+    camPos.set(0, 1.55, 0.2);
+    camLook.set(0, 1.35, 12);
+    camera.position.copy(camPos);
+    camera.lookAt(camLook);
   }
-  camRollTarget = clamp(-drive.curvature * 0.0025 + drive.steerSmooth * 0.05, -0.10, 0.10);
 }
 
 /* ============================================================
@@ -1300,7 +1160,6 @@ function tick(){
    INIT
    ============================================================ */
 initRoad();
-resetCarToRoadStart();
 applyDayNight();
 applyWeatherToRoad();
 updateLabels();

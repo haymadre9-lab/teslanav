@@ -197,7 +197,7 @@
 'use strict';
 
 /* ============================================================
-   ESTADO GLOBAL (Autoboard lo lee aquí)
+   ESTADO GLOBAL
    ============================================================ */
 window.TESLA_STATE = {
   speed: 0, speedMs: 0, curvature: 0, heading: 0,
@@ -231,7 +231,7 @@ scene.fog = new THREE.Fog(0x1a2540, 100, 400);
 
 const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 1000);
 
-// El mundo entero se mueve. El coche está fijo en (0,0,0).
+// El MUNDO entero se traslada y rota. Los segmentos viven aquí.
 const worldGroup = new THREE.Group();
 scene.add(worldGroup);
 
@@ -264,7 +264,7 @@ function applyDayNight(){
 }
 
 /* ============================================================
-   TEXTURAS PROCEDURALES
+   TEXTURAS
    ============================================================ */
 function makeAsphaltTexture(){
   const s = 512;
@@ -316,39 +316,35 @@ const asphaltTex = makeAsphaltTexture();
 const groundTex  = makeGroundTexture();
 
 /* ============================================================
-   CARRETERA PROCEDURAL INFINITA
+   CARRETERA INFINITA
    ------------------------------------------------------------
-   Idea: los segmentos se generan por delante del coche (que está
-   fijo en 0,0,0). Cada segmento tiene un yaw. El coche SIEMPRE
-   está en el segmento "central" y su heading es el yaw de ese
-   segmento. La curvatura del volante modifica el yaw de los
-   NUEVOS segmentos.
+   Cada segmento guarda su posición MUNDIAL FIJA (x, z) y su yaw.
+   NO se recalculan. El mundo se desplaza como un todo.
    ============================================================ */
-const SEG_LEN      = 2.0;        // longitud de cada segmento
-const SEG_COUNT    = 200;        // segmentos vivos
-const LANE_WIDTH   = 3.6;
-const LANES        = 3;
-const HALF_WIDTH   = (LANES * LANE_WIDTH) / 2;   // 5.4 m
-const CAR_OFFSET   = LANE_WIDTH;                 // coche en carril derecho
+const SEG_LEN    = 2.0;
+const SEG_COUNT  = 300;
+const LANE_WIDTH = 3.6;
+const LANES      = 3;
+const HALF_WIDTH = (LANES * LANE_WIDTH) / 2;
+const CAR_OFFSET = LANE_WIDTH;
 
-// Distancia por delante/detrás que queremos cubrir
-const AHEAD_DIST   = SEG_COUNT * SEG_LEN * 0.75; // 300 m por delante
-const BEHIND_DIST  = SEG_COUNT * SEG_LEN * 0.25; // 100 m por detrás
-
-// Anillo de segmentos. segmentos[head] es el más nuevo.
-const segments = [];
+// Anillo de segmentos. head = último generado.
+const segX   = new Float32Array(SEG_COUNT);
+const segZ   = new Float32Array(SEG_COUNT);
+const segYaw = new Float32Array(SEG_COUNT);
 let headIdx = 0;
 
-// Estado de generación: dónde está el "cursor" de generación
+// Cursor de generación (posición mundial donde se generará el próximo segmento)
 let genX = 0, genZ = 0, genYaw = 0;
-// Estado del coche sobre la carretera (en metros recorridos desde el origen)
-let carS = BEHIND_DIST;
 
-// Curvatura suavizada (la que se aplica a nuevos segmentos)
+// Curvatura actual (afecta solo a nuevos segmentos)
 let bendCurrent = 0;
 let bendTarget  = 0;
 
-// Buffers dinámicos para la malla de la carretera
+// Número de segmentos ya generados (para saber cuántos hay válidos al inicio)
+let segValidCount = 0;
+
+// Buffers de malla
 const roadMaxVerts = SEG_COUNT * 2;
 const roadPos = new Float32Array(roadMaxVerts * 3);
 const roadUV  = new Float32Array(roadMaxVerts * 2);
@@ -379,7 +375,6 @@ const roadMesh = new THREE.Mesh(roadGeo, roadMat);
 roadMesh.frustumCulled = false;
 worldGroup.add(roadMesh);
 
-// Cintas (líneas) reutilizando el mismo patrón de índices
 function makeStrip(color, y, opacity){
   const posArr = new Float32Array(roadMaxVerts * 3);
   const geo = new THREE.BufferGeometry();
@@ -398,32 +393,27 @@ const lineEdgeL = makeStrip(0xffffff, 0.02, 0.85);
 const lineEdgeR = makeStrip(0xffffff, 0.02, 0.85);
 const laneLineA = makeStrip(0xffffff, 0.03, 0.70);
 const laneLineB = makeStrip(0xffffff, 0.03, 0.70);
-
-worldGroup.add(lineEdgeL);
-worldGroup.add(lineEdgeR);
-worldGroup.add(laneLineA);
-worldGroup.add(laneLineB);
+worldGroup.add(lineEdgeL, lineEdgeR, laneLineA, laneLineB);
 
 /* ============================================================
-   SUELO (plano grande, se mueve con el mundo)
+   SUELO (Sigue al mundo para que no se vea el borde)
    ============================================================ */
 const ground = new THREE.Mesh(
-  new THREE.PlaneGeometry(3000, 3000),
+  new THREE.PlaneGeometry(2000, 2000),
   new THREE.MeshStandardMaterial({ color: 0x252a33, map: groundTex, roughness: 1.0 })
 );
 ground.rotation.x = -Math.PI/2;
 ground.position.y = -0.06;
-scene.add(ground);
+worldGroup.add(ground);
 
 /* ============================================================
-   COCHE (fijo en el origen, dentro de worldGroup NO; en scene)
+   COCHE (fijo en escena, no en worldGroup)
    ============================================================ */
 const carGroup = new THREE.Group();
 const carBody  = new THREE.Group();
 carGroup.add(carBody);
 scene.add(carGroup);
 
-// Mancha de sombra falsa debajo del coche
 const shadowBlob = new THREE.Mesh(
   new THREE.PlaneGeometry(5.2, 2.6),
   new THREE.MeshBasicMaterial({ color:0x000000, transparent:true, opacity:0.35, depthWrite:false })
@@ -437,35 +427,33 @@ const wheels = { fl:null, fr:null, rl:null, rr:null };
 let bodyMaterial = null;
 const WHEEL_RE = /(wheel|tire|tyre|rueda|llanta|neumatic|pneu|roue|rad)/i;
 
-// Ajustes de orientación del modelo. Si sale mal, cambia estos valores.
+// Ajustes del modelo. Modifica si sale mal.
 let CAR_MODEL_YAW_OFFSET = 0;
 let CAR_MODEL_Y_OFFSET   = 0;
-let CAR_MODEL_X_OFFSET   = 0;
 
 function setupCar(gltf){
   carModel = gltf.scene;
 
-  // 1) Escalar el coche a ~4.6 m de largo
+  // Escalar a ~4.6 m de largo
   const box = new THREE.Box3().setFromObject(carModel);
   const size = new THREE.Vector3(); box.getSize(size);
   const maxDim = Math.max(size.x, size.y, size.z);
   const scale = 4.6 / maxDim;
   carModel.scale.setScalar(scale);
 
-  // 2) Rotación de orientación
+  // Rotación del modelo
   carModel.rotation.y = CAR_MODEL_YAW_OFFSET;
   carModel.updateMatrixWorld(true);
 
-  // 3) Recentrar: el origen del coche debe quedar en el centro de su base
+  // Recentrar
   const box2 = new THREE.Box3().setFromObject(carModel);
   const center = new THREE.Vector3(); box2.getCenter(center);
   carModel.position.x -= center.x;
   carModel.position.z -= center.z;
-  carModel.position.y -= box2.min.y;   // apoyar sobre el suelo
-  carModel.position.x += CAR_MODEL_X_OFFSET;
+  carModel.position.y -= box2.min.y;
   carModel.position.y += CAR_MODEL_Y_OFFSET;
 
-  // 4) Detectar materiales y ruedas
+  // Materiales y ruedas
   let bestBodyMat = null;
   carModel.traverse(o=>{
     if(o.isMesh){
@@ -494,7 +482,6 @@ function setupCar(gltf){
     }
   });
 
-  // Fallback: primer Standard con color
   if(!bestBodyMat){
     carModel.traverse(o=>{
       if(bestBodyMat) return;
@@ -508,7 +495,6 @@ function setupCar(gltf){
     bodyMaterial.color.set($('col').value);
   }
 
-  // Log de nodos (útil para depurar)
   console.log('=== Nodos del coche ===');
   carModel.traverse(o=>{
     if(o.isMesh){
@@ -519,7 +505,6 @@ function setupCar(gltf){
   console.log('Ruedas detectadas:', Object.keys(wheels).filter(k=>wheels[k]));
 
   window.TESLA_STATE.wheelsDetected = !!(wheels.fl||wheels.fr||wheels.rl||wheels.rr);
-
   carBody.add(carModel);
   window.TESLA_STATE.loaded = true;
   $('msg').style.display = 'none';
@@ -549,154 +534,138 @@ loader.load('./car.glb',
 );
 
 /* ============================================================
-   GENERACIÓN DE SEGMENTOS
-   ------------------------------------------------------------
-   Los segmentos se generan POR DELANTE del coche (que está fijo).
-   Al generarlos, avanzamos el "cursor" (genX,genZ,genYaw).
-   Los viejos se van reciclando del anillo.
+   GENERACIÓN DE CARRETERA
    ============================================================ */
-function makeSeg(){ return { x:0, z:0, yaw:0 }; }
-
-function initRoad(){
-  segments.length = 0;
-  for(let i=0;i<SEG_COUNT;i++) segments.push(makeSeg());
-  headIdx = SEG_COUNT - 1;
+function generateInitialRoad(){
+  // Generamos SEG_COUNT segmentos desde atrás. Reservamos los primeros
+  // 1/3 como "detrás" del coche, y los 2/3 restantes como "delante".
+  headIdx = 0;
   genX = 0; genZ = 0; genYaw = 0;
-  // Generamos desde muy atrás hasta muy adelante, cubriendo AHEAD+BEHIND
-  const totalLen = SEG_COUNT * SEG_LEN;
+  segValidCount = 0;
+
+  // Generamos la primera mitad hacia atrás (yaw += PI)
+  const behind = Math.floor(SEG_COUNT * 0.33);
+  // Posicionamos el "origen" para que el segmento `behind` esté en (0,0)
+  // Generamos de atrás hacia adelante:
+  // Para simplificar, generamos con genYaw = 0 y curvatura 0.
+  // Empezamos "lejos atrás" y vamos hacia delante.
+
+  // Posición inicial temporal del cursor (lo colocaremos para que el segmento behind quede en 0,0)
+  genX = 0; genZ = 0; genYaw = 0;
+  // Generamos hacia atrás desde (0,0): retrocedemos
+  // Para que el segmento `behind` esté en (0,0), generamos desde -behind*SEG_LEN hacia delante
+  const startOffset = -behind * SEG_LEN;
+  genX = 0; genZ = startOffset;
+  genYaw = 0;
+
   for(let i=0;i<SEG_COUNT;i++){
-    const seg = segments[i];
-    seg.x = genX; seg.z = genZ; seg.yaw = genYaw;
+    segX[i] = genX;
+    segZ[i] = genZ;
+    segYaw[i] = genYaw;
     genX += Math.sin(genYaw) * SEG_LEN;
     genZ += Math.cos(genYaw) * SEG_LEN;
   }
-  rebuildRoadMesh();
+  headIdx = SEG_COUNT - 1;
+  segValidCount = SEG_COUNT;
 }
 
 function pushSegment(){
   headIdx = (headIdx + 1) % SEG_COUNT;
-  // El nuevo segmento se genera delante del último generado, con el bend actual
   genYaw += bendCurrent * SEG_LEN;
   genX += Math.sin(genYaw) * SEG_LEN;
   genZ += Math.cos(genYaw) * SEG_LEN;
-  const seg = segments[headIdx];
-  seg.x = genX; seg.z = genZ; seg.yaw = genYaw;
+  segX[headIdx] = genX;
+  segZ[headIdx] = genZ;
+  segYaw[headIdx] = genYaw;
 }
 
-// Devuelve el índice de anillo del segmento i-ésimo (0 = el más antiguo)
-function segAt(i){ return segments[(headIdx - (SEG_COUNT - 1) + i + SEG_COUNT*2) % SEG_COUNT]; }
-
-// Posición del coche en función de carS (metros recorridos).
-// El coche está en el origen, y su heading se calcula por la carretera.
-const _carSample = { x:0, z:0, yaw:0 };
-function sampleRoadAt(s){
-  // s = distancia en metros desde el origen de generación
-  // El segmento 0 está en s=0. El segmento i está en s = i*SEG_LEN.
-  // Pero como el coche está fijo y el mundo se mueve, en realidad
-  // lo que necesitamos es: dado que el coche avanza `ds` metros,
-  // avanzamos los segmentos y recolocamos la malla.
-  // Aquí devolvemos la pose del segmento "bajo el coche" (índice fijo).
-  return _carSample;
+// Devuelve el índice del segmento i-ésimo contando desde el más antiguo (0) al más nuevo (SEG_COUNT-1)
+function segRing(i){
+  const idx = (headIdx + 1 + i) % SEG_COUNT;
+  return idx;
 }
 
 /* ============================================================
-   REBUILD DE LA MALLA
+   RECONSTRUCCIÓN DE LA MALLA
    ------------------------------------------------------------
-   Los segmentos vivos se dibujan en worldGroup. Como el coche
-   está en el origen, y queremos que el segmento "bajo el coche"
-   sea siempre el mismo índice (por ejemplo SEG_COUNT*0.25),
-   desplazamos toda la malla para que ese segmento quede en 0,0.
+   Aquí está la CLAVE: los segmentos NO se recolocan. Solo
+   escribimos sus posiciones mundiales en el buffer. El
+   worldGroup se encarga de mover TODO el conjunto.
    ============================================================ */
-const CAR_SEG_IDX = Math.floor(SEG_COUNT * 0.25); // índice del segmento bajo el coche
-
 function rebuildRoadMesh(){
-  const anchor = segAt(CAR_SEG_IDX);
-  const ax = anchor.x, az = anchor.z, ayaw = anchor.yaw;
-  // Rotamos y trasladamos para que el ancla quede en (0,0,0) con yaw 0
-  const cos = Math.cos(-ayaw);
-  const sin = Math.sin(-ayaw);
-
   let vi = 0;
   for(let i=0;i<SEG_COUNT;i++){
-    const s = segAt(i);
-    // Vector desde el ancla
-    let dx = s.x - ax;
-    let dz = s.z - az;
-    // Rotar
-    const rx = dx * cos - dz * sin;
-    const rz = dx * sin + dz * cos;
-    // Perpendicular
-    const px = Math.cos(s.yaw - ayaw);
-    const pz = -Math.sin(s.yaw - ayaw);
+    const idx = segRing(i);
+    const x = segX[idx];
+    const z = segZ[idx];
+    const yaw = segYaw[idx];
+    const px = Math.cos(yaw);
+    const pz = -Math.sin(yaw);
 
-    const leftX  = rx - px * HALF_WIDTH;
-    const leftZ  = rz - pz * HALF_WIDTH;
-    const rightX = rx + px * HALF_WIDTH;
-    const rightZ = rz + pz * HALF_WIDTH;
-
-    roadPos[vi*3+0] = leftX;  roadPos[vi*3+1] = 0; roadPos[vi*3+2] = leftZ;
+    roadPos[vi*3+0] = x - px * HALF_WIDTH;
+    roadPos[vi*3+1] = 0;
+    roadPos[vi*3+2] = z - pz * HALF_WIDTH;
     roadUV[vi*2+0] = 0; roadUV[vi*2+1] = i*0.35;
     vi++;
-    roadPos[vi*3+0] = rightX; roadPos[vi*3+1] = 0; roadPos[vi*3+2] = rightZ;
+
+    roadPos[vi*3+0] = x + px * HALF_WIDTH;
+    roadPos[vi*3+1] = 0;
+    roadPos[vi*3+2] = z + pz * HALF_WIDTH;
     roadUV[vi*2+0] = 1; roadUV[vi*2+1] = i*0.35;
     vi++;
   }
   roadPosAttr.needsUpdate = true;
   roadUVAttr.needsUpdate = true;
 
-  updateStripMapped(lineEdgeL, -HALF_WIDTH + 0.15, 0.08, ax, az, ayaw);
-  updateStripMapped(lineEdgeR,  HALF_WIDTH - 0.15, 0.08, ax, az, ayaw);
-  updateDashedMapped(laneLineA, -HALF_WIDTH + LANE_WIDTH, 0.06, ax, az, ayaw);
-  updateDashedMapped(laneLineB,  HALF_WIDTH - LANE_WIDTH, 0.06, ax, az, ayaw);
+  rebuildStrip(lineEdgeL, -HALF_WIDTH + 0.15, 0.08);
+  rebuildStrip(lineEdgeR,  HALF_WIDTH - 0.15, 0.08);
+  rebuildDashed(laneLineA, -HALF_WIDTH + LANE_WIDTH, 0.06);
+  rebuildDashed(laneLineB,  HALF_WIDTH - LANE_WIDTH, 0.06);
 }
 
-function updateStripMapped(mesh, centerOffset, halfLineWidth, ax, az, ayaw){
+function rebuildStrip(mesh, centerOffset, halfLineWidth){
   const arr = mesh.geometry.attributes.position.array;
-  const cos = Math.cos(-ayaw);
-  const sin = Math.sin(-ayaw);
   let vi = 0;
   for(let i=0;i<SEG_COUNT;i++){
-    const s = segAt(i);
-    const dx = s.x - ax, dz = s.z - az;
-    const rx = dx * cos - dz * sin;
-    const rz = dx * sin + dz * cos;
-    const px = Math.cos(s.yaw - ayaw);
-    const pz = -Math.sin(s.yaw - ayaw);
-    arr[vi*3+0] = rx + px * (centerOffset - halfLineWidth);
+    const idx = segRing(i);
+    const x = segX[idx];
+    const z = segZ[idx];
+    const yaw = segYaw[idx];
+    const px = Math.cos(yaw);
+    const pz = -Math.sin(yaw);
+    arr[vi*3+0] = x + px * (centerOffset - halfLineWidth);
     arr[vi*3+1] = mesh.userData.y;
-    arr[vi*3+2] = rz + pz * (centerOffset - halfLineWidth);
+    arr[vi*3+2] = z + pz * (centerOffset - halfLineWidth);
     vi++;
-    arr[vi*3+0] = rx + px * (centerOffset + halfLineWidth);
+    arr[vi*3+0] = x + px * (centerOffset + halfLineWidth);
     arr[vi*3+1] = mesh.userData.y;
-    arr[vi*3+2] = rz + pz * (centerOffset + halfLineWidth);
+    arr[vi*3+2] = z + pz * (centerOffset + halfLineWidth);
     vi++;
   }
   mesh.geometry.attributes.position.needsUpdate = true;
 }
 
-function updateDashedMapped(mesh, centerOffset, halfLineWidth, ax, az, ayaw){
+function rebuildDashed(mesh, centerOffset, halfLineWidth){
   const arr = mesh.geometry.attributes.position.array;
-  const cos = Math.cos(-ayaw);
-  const sin = Math.sin(-ayaw);
   let vi = 0;
   const halfDash = SEG_LEN * 0.5;
   for(let i=0;i<SEG_COUNT-1;i+=2){
-    const s0 = segAt(i);
-    const s1 = segAt(i+1);
-    const midx = (s0.x + s1.x)*0.5;
-    const midz = (s0.z + s1.z)*0.5;
-    const yaw  = s0.yaw;
-    const dx = midx - ax, dz = midz - az;
-    const rx = dx * cos - dz * sin;
-    const rz = dx * sin + dz * cos;
-    const px = Math.cos(yaw - ayaw);
-    const pz = -Math.sin(yaw - ayaw);
-    const fdx = Math.sin(yaw - ayaw);
-    const fdz = Math.cos(yaw - ayaw);
-    const bx = rx - fdx*halfDash;
-    const bz = rz - fdz*halfDash;
-    const fx = rx + fdx*halfDash;
-    const fz = rz + fdz*halfDash;
+    const idx0 = segRing(i);
+    const idx1 = segRing(i+1);
+    const x0 = segX[idx0], z0 = segZ[idx0];
+    const x1 = segX[idx1], z1 = segZ[idx1];
+    const midx = (x0 + x1) * 0.5;
+    const midz = (z0 + z1) * 0.5;
+    const yaw  = segYaw[idx0];
+    const px = Math.cos(yaw);
+    const pz = -Math.sin(yaw);
+    const dx = Math.sin(yaw);
+    const dz = Math.cos(yaw);
+    const bx = midx - dx * halfDash;
+    const bz = midz - dz * halfDash;
+    const fx = midx + dx * halfDash;
+    const fz = midz + dz * halfDash;
+
     arr[vi*3+0] = bx + px*(centerOffset - halfLineWidth);
     arr[vi*3+1] = mesh.userData.y;
     arr[vi*3+2] = bz + pz*(centerOffset - halfLineWidth);
@@ -719,8 +688,14 @@ function updateDashedMapped(mesh, centerOffset, halfLineWidth, ax, az, ayaw){
 }
 
 /* ============================================================
-   CONDUCCIÓN (coche fijo, mundo desplazado)
+   CONDUCCIÓN
+   ------------------------------------------------------------
+   El coche está fijo en (0,0,0). El worldGroup se traslada y
+   rota cada frame para que el "segmento ancla" quede en el origen
+   mirando a +Z.
    ============================================================ */
+const CAR_SEG_IDX = Math.floor(SEG_COUNT * 0.33); // índice del segmento ancla dentro del anillo
+
 const drive = {
   speed: 80/3.6,
   targetSpeed: 80/3.6,
@@ -731,7 +706,7 @@ const drive = {
   pitch: 0,
   roll: 0,
   totalDistance: 0,
-  heading: 0,        // heading actual del coche (yaw del segmento ancla)
+  heading: 0,
 };
 
 let demoOn = false;
@@ -744,9 +719,13 @@ let gpsEnabled = false;
 let gpsActive = false;
 const gpsSimBase = { lat: 40.4168, lon: -3.7038 };
 
-// Distancia acumulada desde el último "tirón" de generación.
-// Cada vez que el coche avanza SEG_LEN, empujamos un segmento nuevo.
+// Distancia acumulada desde el último pushSegment
 let pushAccum = 0;
+// Cuántos segmentos han pasado "bajo el coche" desde el inicio
+let carSegAdvance = 0;  // entero
+
+// Progreso fraccional del coche dentro del segmento ancla [0,1)
+let carSegFrac = 0;
 
 function updateDrive(dt){
   if(demoOn){
@@ -765,14 +744,11 @@ function updateDrive(dt){
     updateLabels();
   }
 
-  // Velocidad
   drive.speed += (drive.targetSpeed - drive.speed) * (drive.braking ? 4*dt : 1.6*dt);
   drive.speed = Math.max(0, drive.speed);
-
-  // Volante suavizado
   drive.steerSmooth = lerp(drive.steerSmooth, drive.steer, 1-Math.exp(-8*dt));
 
-  // Curvatura: solo afecta a NUEVOS segmentos
+  // Curvatura para nuevos segmentos
   bendTarget = drive.steerSmooth * 0.022;
   bendCurrent = lerp(bendCurrent, bendTarget, 1-Math.exp(-3*dt));
   drive.curvature = clamp(bendCurrent * 3000, -100, 100);
@@ -782,32 +758,79 @@ function updateDrive(dt){
   drive.totalDistance += ds;
   pushAccum += ds;
 
-  // Generamos segmentos a medida que el coche avanza
+  // Cada SEG_LEN metros, generamos un nuevo segmento
   while(pushAccum >= SEG_LEN){
     pushAccum -= SEG_LEN;
     pushSegment();
+    carSegAdvance++;
   }
+  carSegFrac = pushAccum / SEG_LEN;
 
-  // Recalculamos la malla con el ancla en el segmento del coche
+  // Reconstruimos la malla
   rebuildRoadMesh();
 
-  // El coche SIEMPRE está en el origen. Su heading es el yaw del segmento ancla.
-  const anchor = segAt(CAR_SEG_IDX);
-  const yaw = anchor.yaw;
-  drive.heading = yaw;
+  // Obtenemos la pose del "segmento ancla" (donde está el coche)
+  // El coche está sobre el segmento CAR_SEG_IDX del anillo (0..SEG_COUNT-1).
+  // Como hemos avanzado carSegAdvance segmentos desde el inicio, el segmento
+  // ancla es el que estaba en CAR_SEG_IDX originalmente + carSegAdvance.
+  const anchorRingIdx = (CAR_SEG_IDX + carSegAdvance) % SEG_COUNT;
+  const anchorWorldIdx = segRing(anchorRingIdx);
 
-  // Rotación del coche
-  carGroup.rotation.y = yaw;
+  // Para que la interpolación sea suave, interpolamos entre el segmento
+  // ancla y el siguiente.
+  const nextRingIdx = (anchorRingIdx + 1) % SEG_COUNT;
+  const nextWorldIdx = segRing(nextRingIdx);
+
+  const ax = segX[anchorWorldIdx];
+  const az = segZ[anchorWorldIdx];
+  const ayaw = segYaw[anchorWorldIdx];
+  const nx = segX[nextWorldIdx];
+  const nz = segZ[nextWorldIdx];
+  const nyaw = segYaw[nextWorldIdx];
+
+  // Posición interpolada del coche en mundo
+  const carWorldX = lerp(ax, nx, carSegFrac);
+  const carWorldZ = lerp(az, nz, carSegFrac);
+  // Yaw interpolado
+  const dYaw = wrapPi(nyaw - ayaw);
+  const carWorldYaw = ayaw + dYaw * carSegFrac;
+
+  // *** CLAVE: mover worldGroup para que el coche quede en (0,0) mirando a +Z ***
+  // El coche está en (carWorldX, carWorldZ) con yaw carWorldYaw.
+  // Queremos que ese punto se vea en (0,0) y mirando a +Z (yaw=0).
+  // Traslación: -carWorldX, -carWorldZ
+  // Rotación: -carWorldYaw
+  worldGroup.position.set(-carWorldX, 0, -carWorldZ);
+  worldGroup.rotation.y = -carWorldYaw;
+
+  // Aplicar rotación correctamente a la posición:
+  // Three.js aplica primero scale, luego rotation, luego translation.
+  // Pero worldGroup.position se aplica DESPUÉS de la rotación.
+  // Entonces necesitamos rotar el offset manualmente:
+  // worldGroup.rotation.y rotará todo, y luego se traslada.
+  // Para que el punto (carWorldX, carWorldZ) acabe en (0,0):
+  //   R(-yaw) * (carWorldX, carWorldZ) + T = (0,0)
+  //   T = -R(-yaw) * (carWorldX, carWorldZ)
+  const cos = Math.cos(-carWorldYaw);
+  const sin = Math.sin(-carWorldYaw);
+  const rx = cos * carWorldX - sin * carWorldZ;
+  const rz = sin * carWorldX + cos * carWorldZ;
+  worldGroup.position.set(-rx, 0, -rz);
+  worldGroup.rotation.y = -carWorldYaw;
+
+  // El coche queda en (0,0,0) y sin rotación adicional
   carGroup.position.set(0, 0, 0);
+  carGroup.rotation.y = 0;
 
-  // Roll y pitch MUY suaves (cosméticos)
-  const targetRoll  = clamp(drive.curvature * 0.0012, -0.045, 0.045)
-                    + drive.steerSmooth * 0.025;
-  const targetPitch = -drive.speed * 0.0015;
+  drive.heading = carWorldYaw;
+
+  // Roll y pitch MUY suaves (máximo ~2°)
+  const targetRoll  = clamp(drive.steerSmooth * 0.035, -0.035, 0.035);
+  const targetPitch = clamp(-drive.speed * 0.0008, -0.02, 0.02);
   carBody.rotation.z = lerp(carBody.rotation.z, targetRoll,  1-Math.exp(-4*dt));
   carBody.rotation.x = lerp(carBody.rotation.x, targetPitch, 1-Math.exp(-4*dt));
 
-  // Ruedas: giro al rodar + dirección
+  // Ruedas
   const wheelSteer = drive.steerSmooth * 0.45;
   const wheelSpin  = (drive.speed * dt) / 0.33;
   if(wheels.fl){
@@ -821,11 +844,11 @@ function updateDrive(dt){
   if(wheels.rl){ wheels.rl.rotation.x = (wheels.rl.userData.baseRotX||0) + wheelSpin; }
   if(wheels.rr){ wheels.rr.rotation.x = (wheels.rr.userData.baseRotX||0) + wheelSpin; }
 
-  // Estado global
+  // Estado
   window.TESLA_STATE.speed     = drive.speed * 3.6;
   window.TESLA_STATE.speedMs   = drive.speed;
   window.TESLA_STATE.curvature = drive.curvature;
-  window.TESLA_STATE.heading   = ((yaw * 180/Math.PI) + 360) % 360;
+  window.TESLA_STATE.heading   = ((carWorldYaw * 180/Math.PI) + 360) % 360;
   window.TESLA_STATE.steering  = drive.steerSmooth;
   window.TESLA_STATE.braking   = drive.braking;
   window.TESLA_STATE.raining   = raining;
@@ -833,10 +856,9 @@ function updateDrive(dt){
   window.TESLA_STATE.distance  = drive.totalDistance;
   window.TESLA_STATE.timestamp = performance.now();
 
-  // GPS simulado
   if(!gpsActive){
-    const latDelta = (drive.totalDistance / 111320) * Math.cos(yaw);
-    const lonDelta = (drive.totalDistance / (111320*Math.cos(gpsSimBase.lat*Math.PI/180))) * Math.sin(yaw);
+    const latDelta = (drive.totalDistance / 111320) * Math.cos(carWorldYaw);
+    const lonDelta = (drive.totalDistance / (111320*Math.cos(gpsSimBase.lat*Math.PI/180))) * Math.sin(carWorldYaw);
     window.TESLA_STATE.lat = gpsSimBase.lat + latDelta * 0.001;
     window.TESLA_STATE.lon = gpsSimBase.lon + lonDelta * 0.001;
   }
@@ -850,7 +872,7 @@ function updateDrive(dt){
 }
 
 /* ============================================================
-   CÁMARA (rígida al coche, sin lerps largos)
+   CÁMARA (rígida al coche)
    ============================================================ */
 let camRoll = 0;
 let viewMode = 'chase';
@@ -862,15 +884,13 @@ function updateCamera(dt){
     const speedFactor = clamp(drive.speed / 40, 0, 1);
     const dist  = lerp(10, 14, speedFactor);
     const height= lerp(5.5, 7.0, speedFactor);
-    // Cámara detrás del coche (el coche está en 0,0,0 mirando a +Z)
     camPos.set(0, height, -dist);
     camLook.set(0, 1.2, 8);
     camera.position.copy(camPos);
     camera.lookAt(camLook);
-    camRoll = lerp(camRoll, drive.curvature * 0.0015, 1-Math.exp(-4*dt));
+    camRoll = lerp(camRoll, 0, 1-Math.exp(-4*dt));
     camera.rotateZ(camRoll);
   } else {
-    // Vista conductor
     camPos.set(0, 1.55, 0.2);
     camLook.set(0, 1.35, 12);
     camera.position.copy(camPos);
@@ -965,7 +985,6 @@ function updateHUD(){
   const spd = window.TESLA_STATE.speed;
   $('spdNum').textContent = Math.round(spd);
   setArcProgress(spd / 220);
-
   setCurvBar(window.TESLA_STATE.curvature);
   $('infoCurv').textContent = Math.round(window.TESLA_STATE.curvature);
   $('infoHdg').textContent  = Math.round(window.TESLA_STATE.heading) + '°';
@@ -1159,7 +1178,8 @@ function tick(){
 /* ============================================================
    INIT
    ============================================================ */
-initRoad();
+generateInitialRoad();
+rebuildRoadMesh();
 applyDayNight();
 applyWeatherToRoad();
 updateLabels();

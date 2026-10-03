@@ -13,15 +13,14 @@
   html,body{height:100%;background:var(--bg);color:var(--txt);
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;
     overflow:hidden;-webkit-font-smoothing:antialiased;}
+
   #stage{position:absolute;inset:0;
     background:linear-gradient(#0a1526 0%,#0e2038 30%,#0b1322 46%,#070b13 100%);}
   #gl{position:absolute;inset:0;width:100%;height:100%;display:block;}
   #rain{position:absolute;inset:0;width:100%;height:100%;z-index:4;pointer-events:none;}
 
-  /* ---------- HUD ---------- */
   #hud{position:absolute;inset:0;z-index:6;pointer-events:none;}
 
-  /* Velocímetro SVG estilo Tesla */
   .speedo{
     position:absolute;left:50%;bottom:24px;transform:translateX(-50%);
     width:230px;height:150px;
@@ -34,7 +33,6 @@
   .speedo .num{font-size:44px;font-weight:800;fill:#fff;letter-spacing:-1px;}
   .speedo .unit{font-size:11px;font-weight:700;fill:var(--dim);letter-spacing:2px;}
 
-  /* Curvatura */
   .curv{
     position:absolute;left:50%;bottom:4px;transform:translateX(-50%);
     width:180px;height:6px;border-radius:3px;background:#1b2130;overflow:hidden;
@@ -49,9 +47,9 @@
     transition:width .1s linear,left .1s linear;
   }
 
-  /* Estado arriba dcha */
   .status{
     position:absolute;top:14px;right:14px;display:flex;gap:8px;align-items:center;
+    flex-wrap:wrap;justify-content:flex-end;max-width:60vw;
   }
   .chip{
     background:rgba(16,18,24,.72);border:1px solid var(--bd);
@@ -61,8 +59,8 @@
   }
   .chip.on{color:#04130c;background:var(--ok);border-color:var(--ok);}
   .chip.warn{color:#1a1200;background:var(--warn);border-color:var(--warn);}
+  .chip.info{color:#e7eaf0;background:rgba(57,217,138,.18);border-color:var(--ok);}
 
-  /* Info abajo izq */
   .info{
     position:absolute;left:12px;bottom:12px;
     background:rgba(16,18,24,.72);border:1px solid var(--bd);
@@ -71,10 +69,9 @@
   }
   .info b{color:var(--txt);font-weight:800;}
 
-  /* Panel control */
   #panel{
     position:absolute;left:50%;top:8px;transform:translateX(-50%);
-    width:min(96vw,820px);
+    width:min(96vw,840px);
     background:rgba(14,16,22,.84);border:1px solid var(--bd);
     border-radius:14px;padding:8px 11px;z-index:30;
     backdrop-filter:blur(8px);
@@ -108,6 +105,20 @@
     animation:pulse 1.2s ease-in-out infinite;
   }
   @keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
+
+  .loader{
+    width:200px;height:6px;background:#1b2130;border-radius:3px;overflow:hidden;margin-top:8px;
+  }
+  .loader .bar{height:100%;width:0;background:var(--accent);transition:width .15s linear;}
+
+  @media (max-width:600px){
+    #panel{width:96vw;padding:6px 8px;}
+    #panel label{min-width:auto;font-size:11px;}
+    #panel button{padding:6px 8px;font-size:11px;}
+    .speedo{width:190px;height:124px;bottom:16px;}
+    .speedo .num{font-size:36px;}
+    .info{font-size:10px;}
+  }
 </style>
 </head>
 <body>
@@ -117,9 +128,11 @@
 
   <div id="hud">
     <div class="status">
+      <div class="chip info" id="chipLanes">🛣️ 2 carriles</div>
       <div class="chip" id="chipBrake">🛑 FRENO</div>
       <div class="chip" id="chipRain">🌧️ SECO</div>
       <div class="chip on" id="chipDay">☀️ DÍA</div>
+      <div class="chip" id="chipGps">🛰️ GPS OFF</div>
     </div>
 
     <div class="speedo">
@@ -133,16 +146,16 @@
     <div class="curv"><div class="fill" id="curvFill"></div></div>
 
     <div class="info">
-      <div>Vista: <b id="infoView">Perseguidor</b></div>
-      <div>Curvatura: <b id="infoCurv">0</b> · Heading: <b id="infoHdg">0°</b></div>
-      <div>FPS: <b id="infoFps">–</b> · Pulsa <b>H</b> para ocultar panel</div>
+      <div>Vista: <b id="infoView">Perseguidor</b> · Curvatura: <b id="infoCurv">0</b></div>
+      <div>Heading: <b id="infoHdg">0°</b> · FPS: <b id="infoFps">–</b></div>
+      <div>Distancia: <b id="infoDist">0</b> m · <b>H</b> panel</div>
     </div>
   </div>
 
   <div id="panel">
     <div class="row">
       <label>Velocidad</label>
-      <input id="spdS" type="range" min="0" max="200" value="80">
+      <input id="spdS" type="range" min="0" max="220" value="80">
       <span class="val" id="spdV">80 km/h</span>
     </div>
     <div class="row">
@@ -162,54 +175,49 @@
     </div>
     <div class="row">
       <button id="bDemo" class="g">▶ Demo</button>
+      <button id="bAuto">🎢 Auto-curvas</button>
+      <button id="bGps">🛰️ GPS</button>
       <label style="min-width:auto">Color</label>
       <input id="col" type="color" value="#7d838c">
       <span class="val" id="colV" style="min-width:80px">#7d838c</span>
     </div>
   </div>
 
-  <div id="msg"><span class="dot"></span><span id="msgTxt">Cargando car.glb…</span></div>
+  <div id="msg">
+    <span class="dot"></span>
+    <div>
+      <div id="msgTxt">Cargando car.glb…</div>
+      <div class="loader" id="loaderBox"><div class="bar" id="loadBar"></div></div>
+    </div>
+  </div>
 </div>
 
-<!-- ============================== THREE.JS r128 ============================== -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 
-<!-- ============================== APP ============================== -->
 <script>
 (function(){
 'use strict';
 
 /* ============================================================
-   0. ESTADO GLOBAL (esto lo lee Autoboard)
+   ESTADO GLOBAL (Autoboard lo lee aquí)
    ============================================================ */
 window.TESLA_STATE = {
-  speed: 0,           // km/h
-  speedMs: 0,
-  curvature: 0,       // -100..100
-  heading: 0,         // grados
-  lat: 40.4168,
-  lon: -3.7038,
-  steering: 0,        // -1..1
-  braking: false,
-  raining: false,
-  dayNight: 1,        // 0=noche 1=día
-  view: 'chase',
-  wheelsDetected: false,
-  loaded: false,
-  timestamp: 0
+  speed: 0, speedMs: 0, curvature: 0, heading: 0,
+  lat: 40.4168, lon: -3.7038, alt: null, accuracy: null,
+  steering: 0, braking: false, raining: false, dayNight: 1,
+  view: 'chase', lanes: 2, wheelsDetected: false,
+  gps: { enabled: false, simulated: true, active: false },
+  distance: 0, loaded: false, timestamp: 0
 };
 
-/* ============================================================
-   1. UTILIDADES
-   ============================================================ */
-const $  = (id) => document.getElementById(id);
-const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
-const lerp  = (a,b,t) => a + (b-a)*t;
-const wrapPi = (a) => { while(a> Math.PI) a-=Math.PI*2; while(a<-Math.PI) a+=Math.PI*2; return a; };
+const $ = (id)=>document.getElementById(id);
+const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+const lerp  = (a,b,t)=>a+(b-a)*t;
+const wrapPi = (a)=>{ while(a>Math.PI) a-=Math.PI*2; while(a<-Math.PI) a+=Math.PI*2; return a; };
 
 /* ============================================================
-   2. ESCENA / RENDER / CÁMARA
+   RENDERER / ESCENA / CÁMARA
    ============================================================ */
 const canvas = $('gl');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:true });
@@ -222,13 +230,12 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0x0a1526, 60, 320);
+scene.fog = new THREE.Fog(0x0a1526, 80, 340);
 
 const camera = new THREE.PerspectiveCamera(62, innerWidth/innerHeight, 0.1, 1000);
-camera.position.set(0, 6, -12);
 
 /* ============================================================
-   3. LUCES (día / noche)
+   LUCES
    ============================================================ */
 const hemi = new THREE.HemisphereLight(0xbcd6ff, 0x0a1020, 0.85);
 scene.add(hemi);
@@ -237,12 +244,9 @@ const sun = new THREE.DirectionalLight(0xffe9c4, 1.15);
 sun.position.set(60, 90, 40);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
-sun.shadow.camera.left   = -60;
-sun.shadow.camera.right  =  60;
-sun.shadow.camera.top    =  60;
-sun.shadow.camera.bottom = -60;
-sun.shadow.camera.near   =   1;
-sun.shadow.camera.far    = 200;
+sun.shadow.camera.left = -50; sun.shadow.camera.right =  50;
+sun.shadow.camera.top  =  50; sun.shadow.camera.bottom= -50;
+sun.shadow.camera.near = 1;   sun.shadow.camera.far   = 180;
 sun.shadow.bias = -0.0004;
 scene.add(sun);
 
@@ -250,7 +254,7 @@ const ambient = new THREE.AmbientLight(0x223046, 0.4);
 scene.add(ambient);
 
 let isDay = true;
-let dayNightT = 1; // 1 = día, 0 = noche
+let dayNightT = 1;
 
 function applyDayNight(){
   const t = dayNightT;
@@ -264,170 +268,272 @@ function applyDayNight(){
 }
 
 /* ============================================================
-   4. CARRETERA CON SPLINE
+   TEXTURAS PROCEDURALES
    ============================================================ */
-const ROAD_HALF_WIDTH = 4.5;   // 9 m de ancho total
-const MAX_LATERAL = ROAD_HALF_WIDTH - 0.9; // margen para no salir
-
-// Genera una spline cerrada con tramos variados
-function buildRoadSpline(){
-  const pts = [];
-  const N = 28;
-  const radius = 90;
-  for(let i=0;i<N;i++){
-    const a = i/N * Math.PI*2;
-    // modulación radial para que no sea un círculo perfecto
-    const r = radius
-      + 22*Math.sin(a*2.0)
-      + 14*Math.sin(a*3.0 + 1.1)
-      +  9*Math.sin(a*5.0 + 2.3);
-    pts.push(new THREE.Vector3(Math.cos(a)*r, 0, Math.sin(a)*r));
+function makeAsphaltTexture(){
+  const s = 512;
+  const c = document.createElement('canvas'); c.width=s; c.height=s;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#1b1f26'; ctx.fillRect(0,0,s,s);
+  // Ruido granular
+  const img = ctx.getImageData(0,0,s,s);
+  const d = img.data;
+  for(let i=0;i<d.length;i+=4){
+    const n = (Math.random()*70)|0;
+    d[i]   = clamp(d[i]+n-35, 0, 255);
+    d[i+1] = clamp(d[i+1]+n-35, 0, 255);
+    d[i+2] = clamp(d[i+2]+n-35, 0, 255);
   }
-  const curve = new THREE.CatmullRomCurve3(pts, true, 'catmullrom', 0.5);
-  return curve;
+  ctx.putImageData(img,0,0);
+  // Manchas
+  for(let i=0;i<180;i++){
+    const x=Math.random()*s, y=Math.random()*s;
+    const r=Math.random()*30+4;
+    const g=ctx.createRadialGradient(x,y,0,x,y,r);
+    const a=Math.random()*0.06;
+    g.addColorStop(0, `rgba(0,0,0,${a})`);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+  }
+  // Pequeños brillos
+  for(let i=0;i<300;i++){
+    const x=Math.random()*s, y=Math.random()*s;
+    ctx.fillStyle = `rgba(255,255,255,${Math.random()*0.05})`;
+    ctx.fillRect(x,y,1,1);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy ? renderer.capabilities.getMaxAnisotropy() : 1;
+  return tex;
 }
 
-const roadCurve = buildRoadSpline();
-const roadLength = roadCurve.getLength();
-
-// Geometría de la cinta
-function buildRoadMesh(curve, halfWidth){
-  const divisions = 800;
-  const positions = [];
-  const uvs = [];
-  const indices = [];
-  const tmp = new THREE.Vector3();
-  const tan = new THREE.Vector3();
-  const up  = new THREE.Vector3(0,1,0);
-  const nor = new THREE.Vector3();
-  const bin = new THREE.Vector3();
-
-  for(let i=0;i<=divisions;i++){
-    const t = i/divisions;
-    curve.getPointAt(t, tmp);
-    curve.getTangentAt(t, tan);
-    nor.crossVectors(up, tan).normalize();
-    // cinta
-    positions.push(tmp.x - nor.x*halfWidth, 0.02, tmp.z - nor.z*halfWidth);
-    positions.push(tmp.x + nor.x*halfWidth, 0.02, tmp.z + nor.z*halfWidth);
-    uvs.push(0, t*40, 1, t*40);
-    if(i<divisions){
-      const a = i*2, b = i*2+1, c = (i+1)*2, d = (i+1)*2+1;
-      indices.push(a,b,c,  b,d,c);
-    }
+function makeRoughnessTexture(){
+  const s = 256;
+  const c = document.createElement('canvas'); c.width=s; c.height=s;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#c8c8c8'; ctx.fillRect(0,0,s,s);
+  for(let i=0;i<2500;i++){
+    const x=Math.random()*s, y=Math.random()*s;
+    const v = 180 + (Math.random()*60|0);
+    ctx.fillStyle = `rgb(${v},${v},${v})`;
+    ctx.fillRect(x,y, 1+(Math.random()*2|0), 1+(Math.random()*2|0));
   }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
 
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(positions,3));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs,2));
-  g.setIndex(indices);
-  g.computeVertexNormals();
+function makeGrassTexture(){
+  const s = 256;
+  const c = document.createElement('canvas'); c.width=s; c.height=s;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#0e1c16'; ctx.fillRect(0,0,s,s);
+  for(let i=0;i<5000;i++){
+    const x=Math.random()*s, y=Math.random()*s;
+    const g = 40 + (Math.random()*70|0);
+    const b = 25 + (Math.random()*40|0);
+    ctx.fillStyle = `rgb(${(g*0.4)|0},${g},${b})`;
+    ctx.fillRect(x,y,1,1+(Math.random()*2|0));
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(60, 60);
+  return tex;
+}
 
-  const mat = new THREE.MeshStandardMaterial({
-    color: 0x1b2028, roughness: 0.95, metalness: 0.0
-  });
-  const mesh = new THREE.Mesh(g, mat);
-  mesh.receiveShadow = true;
+const asphaltTex = makeAsphaltTexture();
+const roughTex   = makeRoughnessTexture();
+const grassTex   = makeGrassTexture();
+
+/* ============================================================
+   CARRETERA PROCEDURAL INFINITA (Motor A1)
+   ------------------------------------------------------------
+   - El coche está en (0,0,0) local y siempre mira hacia +Z
+   - El mundo se desplaza bajo él
+   - Cada segmento es un "trazo" de longitud fija; guardamos
+     en una lista circular los N segmentos activos
+   - Cada segmento guarda: posición acumulada del centro (x,z),
+     heading acumulado (yaw), y se generan sus vértices de
+     izquierda/derecha a partir de ahí
+   ============================================================ */
+
+const SEG_LEN = 2.0;              // 2 m por segmento
+const SEG_COUNT = 260;            // 260 * 2 = 520 m de carretera viva
+const SEG_AHEAD = 200;            // ~400 m por delante del coche
+const LANE_WIDTH = 3.6;           // 3.6 m por carril
+let currentLanes = 2;             // 2 carriles por defecto (7.2 m)
+let targetLanes  = 2;
+let halfWidth    = (currentLanes * LANE_WIDTH) / 2;
+
+// Lista circular de segmentos: guardamos índices de 0..SEG_COUNT-1
+// Cada segmento tiene un centro en coords "locales acumuladas"
+// y un yaw. Mantenemos un "cursor" que apunta al último generado.
+const segments = [];
+let headIdx = 0;   // último segmento generado
+let tailIdx = 0;   // primer segmento vivo (más viejo)
+let generatedCount = 0;
+
+// Posición acumulada en coords mundo para generar el siguiente segmento
+let genX = 0, genZ = 0, genYaw = 0;
+
+// Distancia total recorrida
+let totalDistance = 0;
+
+// Curvatura suavizada aplicada a la generación de segmentos
+// (viene del volante, se acumula y se endereza sola)
+let roadBend = 0;          // radianes/metro acumulados que aplicamos por segmento
+let roadBendTarget = 0;    // objetivo basado en el volante
+
+// Buffer único de geometría para la carretera (se actualiza dinámicamente)
+const roadMaxVerts = SEG_COUNT * 2;
+const roadPos = new Float32Array(roadMaxVerts * 3);
+const roadUV  = new Float32Array(roadMaxVerts * 2);
+const roadPosAttr = new THREE.BufferAttribute(roadPos, 3);
+const roadUVAttr  = new THREE.BufferAttribute(roadUV, 2);
+roadPosAttr.setUsage(THREE.DynamicDrawUsage);
+roadUVAttr.setUsage(THREE.DynamicDrawUsage);
+
+const roadIndices = [];
+for(let i=0;i<SEG_COUNT-1;i++){
+  const a = i*2, b = i*2+1, c = (i+1)*2, d = (i+1)*2+1;
+  roadIndices.push(a,b,c, b,d,c);
+}
+
+const roadGeo = new THREE.BufferGeometry();
+roadGeo.setAttribute('position', roadPosAttr);
+roadGeo.setAttribute('uv', roadUVAttr);
+roadGeo.setIndex(roadIndices);
+
+const roadMat = new THREE.MeshStandardMaterial({
+  color: 0xffffff,
+  map: asphaltTex,
+  roughnessMap: roughTex,
+  roughness: 0.92,
+  metalness: 0.05,
+  side: THREE.DoubleSide,
+});
+const roadMesh = new THREE.Mesh(roadGeo, roadMat);
+roadMesh.receiveShadow = true;
+roadMesh.frustumCulled = false;
+scene.add(roadMesh);
+
+// Arcén y líneas: usamos 3 meshes más que comparten el mismo buffer
+// pero con UVs desplazados y colores distintos. Más simple: líneas
+// como MeshBasicMaterial encima, dibujadas cada frame con su propio
+// buffer estático.
+function makeSideStrip(offsetFn, width, color, y){
+  const posArr = new Float32Array(roadMaxVerts * 3);
+  const geo = new THREE.BufferGeometry();
+  const attr = new THREE.BufferAttribute(posArr, 3);
+  attr.setUsage(THREE.DynamicDrawUsage);
+  geo.setAttribute('position', attr);
+  geo.setIndex(roadIndices.slice());
+  const mat = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, transparent:true, opacity:1.0, depthWrite:false });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.frustumCulled = false;
+  mesh.userData.offsetFn = offsetFn;
+  mesh.userData.y = y;
+  scene.add(mesh);
   return mesh;
 }
 
-const roadMesh = buildRoadMesh(roadCurve, ROAD_HALF_WIDTH);
-scene.add(roadMesh);
+// Línea blanca continua izquierda y derecha (2 * 0.15 m de ancho)
+const lineL = makeSideStrip((hw)=> -hw + 0.35, 0.15, 0xffffff, 0.02);
+const lineR = makeSideStrip((hw)=>  hw - 0.35, 0.15, 0xffffff, 0.02);
 
-// Líneas laterales
-function buildEdgeLines(curve, halfWidth, offset, color){
-  const divisions = 800;
-  const positions = [];
-  const tmp = new THREE.Vector3();
-  const tan = new THREE.Vector3();
-  const up  = new THREE.Vector3(0,1,0);
-  const nor = new THREE.Vector3();
-  for(let i=0;i<=divisions;i++){
-    const t = i/divisions;
-    curve.getPointAt(t, tmp);
-    curve.getTangentAt(t, tan);
-    nor.crossVectors(up, tan).normalize();
-    const side = offset>0?1:-1;
-    positions.push(tmp.x + nor.x*offset, 0.04, tmp.z + nor.z*offset);
+// Línea discontinua central (blanca amarillenta)
+const lineC = (function(){
+  const posArr = new Float32Array(roadMaxVerts * 3);
+  const geo = new THREE.BufferGeometry();
+  const attr = new THREE.BufferAttribute(posArr, 3);
+  attr.setUsage(THREE.DynamicDrawUsage);
+  geo.setAttribute('position', attr);
+  // Para la discontinua necesitamos geometría por segmento: un quad
+  // por cada segmento par, con la mitad de su longitud.
+  const indices = [];
+  const dashedSegments = [];
+  for(let i=0;i<SEG_COUNT-1;i+=2){
+    const a = i*2, b = i*2+1, c = (i+1)*2, d = (i+1)*2+1;
+    indices.push(a,b,c, b,d,c);
   }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(positions,3));
-  const m = new THREE.LineBasicMaterial({ color, transparent:true, opacity:0.55 });
-  return new THREE.Line(g, m);
-}
-
-scene.add(buildEdgeLines(roadCurve, ROAD_HALF_WIDTH,  ROAD_HALF_WIDTH-0.25, 0xffffff));
-scene.add(buildEdgeLines(roadCurve, ROAD_HALF_WIDTH, -ROAD_HALF_WIDTH+0.25, 0xffffff));
-
-// Línea central discontinua
-(function(){
-  const divisions = 400;
-  const positions = [];
-  const tmp = new THREE.Vector3();
-  for(let i=0;i<divisions;i+=2){
-    const t0 = i/divisions, t1 = (i+1)/divisions;
-    curveDash(t0, tmp); positions.push(tmp.x, 0.05, tmp.z);
-    curveDash(t1, tmp); positions.push(tmp.x, 0.05, tmp.z);
-  }
-  function curveDash(t, out){
-    roadCurve.getPointAt(t, out);
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(positions,3));
-  const m = new THREE.LineBasicMaterial({ color: 0xf5e8b0, transparent:true, opacity:0.7 });
-  scene.add(new THREE.LineSegments(g, m));
+  geo.setIndex(indices);
+  const mat = new THREE.MeshBasicMaterial({ color: 0xf5e8b0, side: THREE.DoubleSide, depthWrite:false });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.frustumCulled = false;
+  scene.add(mesh);
+  return mesh;
 })();
 
-/* ============================================================
-   5. SUELO / ENTORNO
-   ============================================================ */
+// Radio de actualización: cualquier árbol/poste dentro de este radio se elimina al reciclarse
+const envGroup = new THREE.Group();
+scene.add(envGroup);
+
+// Pool de árboles y postes para no crear/destruir constantemente
+const treePool = [];
+const postPool = [];
+const TREE_COUNT = 60;
+const POST_COUNT = 40;
+
+function makeTree(){
+  const g = new THREE.Group();
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3a2a1c, roughness: 1 });
+  const leafMat  = new THREE.MeshStandardMaterial({ color: 0x1e4a2a, roughness: 0.9 });
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.15,0.2,1.6,6), trunkMat);
+  trunk.position.y = 0.8; trunk.castShadow = true;
+  g.add(trunk);
+  // 2 conos apilados para el follaje
+  const c1 = new THREE.Mesh(new THREE.ConeGeometry(1.1, 2.2, 8), leafMat);
+  c1.position.y = 2.2; c1.castShadow = true;
+  g.add(c1);
+  const c2 = new THREE.Mesh(new THREE.ConeGeometry(0.85, 1.8, 8), leafMat);
+  c2.position.y = 3.4; c2.castShadow = true;
+  g.add(c2);
+  return g;
+}
+
+function makePost(){
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: 0x243040, roughness: 0.6, metalness: 0.4 });
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.06,4.2,6), mat);
+  pole.position.y = 2.1; pole.castShadow = true;
+  g.add(pole);
+  const arm = new THREE.Mesh(new THREE.BoxGeometry(1.2,0.08,0.08), mat);
+  arm.position.set(0.6,4.15,0); arm.castShadow = true;
+  g.add(arm);
+  const bulb = new THREE.Mesh(
+    new THREE.SphereGeometry(0.14,8,8),
+    new THREE.MeshBasicMaterial({ color: 0xffd9a0 })
+  );
+  bulb.position.set(1.15,4.1,0);
+  g.add(bulb);
+  return g;
+}
+
+for(let i=0;i<TREE_COUNT;i++){
+  const t = makeTree(); t.visible = false; envGroup.add(t); treePool.push(t);
+}
+for(let i=0;i<POST_COUNT;i++){
+  const p = makePost(); p.visible = false; envGroup.add(p); postPool.push(p);
+}
+
+// Suelo
 const ground = new THREE.Mesh(
-  new THREE.PlaneGeometry(1200, 1200),
-  new THREE.MeshStandardMaterial({ color: 0x0a1424, roughness: 1.0, metalness: 0.0 })
+  new THREE.PlaneGeometry(2000, 2000),
+  new THREE.MeshStandardMaterial({ color: 0x0e1c16, map: grassTex, roughness: 1.0 })
 );
 ground.rotation.x = -Math.PI/2;
-ground.position.y = -0.02;
+ground.position.y = -0.05;
 ground.receiveShadow = true;
 scene.add(ground);
 
-// Grid tenue para dar sensación de movimiento
-const grid = new THREE.GridHelper(600, 60, 0x1b2c44, 0x122032);
-grid.position.y = 0.005;
-grid.material.transparent = true;
-grid.material.opacity = 0.35;
-scene.add(grid);
-
-// Postes de luz (referencias visuales para que se note el avance)
-(function(){
-  const postMat = new THREE.MeshStandardMaterial({ color:0x243040, roughness:0.6, metalness:0.4 });
-  const bulbMat = new THREE.MeshBasicMaterial({ color: 0xffd9a0 });
-  const N = 60;
-  for(let i=0;i<N;i++){
-    const t = i/N;
-    const p = roadCurve.getPointAt(t);
-    const tan = roadCurve.getTangentAt(t);
-    const nor = new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0), tan).normalize();
-    const baseX = p.x + nor.x*(ROAD_HALF_WIDTH+1.2);
-    const baseZ = p.z + nor.z*(ROAD_HALF_WIDTH+1.2);
-    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.06,5,6), postMat);
-    post.position.set(baseX, 2.5, baseZ);
-    post.castShadow = true;
-    scene.add(post);
-    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.14,8,8), bulbMat);
-    bulb.position.set(baseX, 5, baseZ);
-    scene.add(bulb);
-  }
-})();
-
 /* ============================================================
-   6. COCHE (GLB)
+   COCHE
    ============================================================ */
-const carGroup = new THREE.Group();          // wrapper absoluto (posición + heading real)
-const carBody  = new THREE.Group();          // wrapper relativo (giro fino del morro)
+const carGroup = new THREE.Group();
+const carBody  = new THREE.Group();
 carGroup.add(carBody);
 scene.add(carGroup);
 
-// Sombras falsas bajo el coche
 const shadowBlob = new THREE.Mesh(
   new THREE.PlaneGeometry(5.2, 2.6),
   new THREE.MeshBasicMaterial({ color:0x000000, transparent:true, opacity:0.35, depthWrite:false })
@@ -437,50 +543,35 @@ shadowBlob.position.y = 0.03;
 carGroup.add(shadowBlob);
 
 let carModel = null;
-let wheels = { fl:null, fr:null, rl:null, rr:null };
+const wheels = { fl:null, fr:null, rl:null, rr:null };
 let bodyMaterial = null;
-let carLength = 4.6;
-
 const WHEEL_RE = /(wheel|tire|tyre|rueda|llanta|neumatic|pneu|roue|rad)/i;
 
 function setupCar(gltf){
   carModel = gltf.scene;
-
-  // Auto-escala a ~4.6 m de largo
   const box = new THREE.Box3().setFromObject(carModel);
   const size = new THREE.Vector3(); box.getSize(size);
   const maxDim = Math.max(size.x, size.y, size.z);
   const scale = 4.6 / maxDim;
   carModel.scale.setScalar(scale);
 
-  // Re-centrar en el suelo
   const box2 = new THREE.Box3().setFromObject(carModel);
   const center = new THREE.Vector3(); box2.getCenter(center);
   carModel.position.x -= center.x;
   carModel.position.z -= center.z;
   carModel.position.y -= box2.min.y;
 
-  // Sombras + materiales
   carModel.traverse(o=>{
     if(o.isMesh){
-      o.castShadow = true;
-      o.receiveShadow = false;
+      o.castShadow = true; o.receiveShadow = false;
       if(o.material){
         const mats = Array.isArray(o.material)?o.material:[o.material];
         mats.forEach(m=>{
-          if(m.name && /body|paint|carroceria/i.test(m.name)){
-            bodyMaterial = m;
-          }
+          if(m.name && /body|paint|carroceria/i.test(m.name)) bodyMaterial = m;
         });
       }
     }
-  });
-
-  // Detección de ruedas por nombre
-  carModel.traverse(o=>{
-    if(!o.name) return;
-    if(WHEEL_RE.test(o.name)){
-      // heurística: delanteras vs traseras por Z local
+    if(o.name && WHEEL_RE.test(o.name)){
       const wp = new THREE.Vector3();
       o.getWorldPosition(wp);
       const local = carModel.worldToLocal(wp.clone());
@@ -492,210 +583,455 @@ function setupCar(gltf){
       if(!isFront && !isLeft)wheels.rr = o;
     }
   });
-  window.TESLA_STATE.wheelsDetected = !!(wheels.fl||wheels.fr||wheels.rl||wheels.rr);
-
-  // Guardar posición base de las ruedas para rotarlas
   Object.values(wheels).forEach(w=>{ if(w) w.userData.baseRotY = w.rotation.y; });
+  window.TESLA_STATE.wheelsDetected = !!(wheels.fl||wheels.fr||wheels.rl||wheels.rr);
 
   carBody.add(carModel);
   window.TESLA_STATE.loaded = true;
   $('msg').style.display = 'none';
 }
 
-/* ============================================================
-   7. CARGA DEL GLB
-   ============================================================ */
 const loader = new THREE.GLTFLoader();
 loader.load('./car.glb',
   (gltf)=>{ try{ setupCar(gltf); }catch(e){ console.error(e); $('msgTxt').textContent = 'Error al preparar el coche'; } },
-  (ev)=>{ if(ev.total){ $('msgTxt').textContent = 'Cargando car.glb… ' + Math.round(ev.loaded/ev.total*100) + '%'; } },
+  (ev)=>{
+    if(ev.total){
+      const pct = Math.round(ev.loaded/ev.total*100);
+      $('msgTxt').textContent = 'Cargando car.glb… ' + pct + '%';
+      $('loadBar').style.width = pct + '%';
+    }
+  },
   (err)=>{ console.error(err); $('msgTxt').textContent = 'No se encontró car.glb (colócalo junto al index.html)'; }
 );
 
 /* ============================================================
-   8. MOTOR DE CONDUCCIÓN
+   MOTOR A1 — GENERACIÓN / RECICLAJE DE SEGMENTOS
+   ============================================================ */
+
+// Inicializa la rejilla con SEG_COUNT segmentos rectos delante
+function initRoad(){
+  segments.length = 0;
+  genX = 0; genZ = 0; genYaw = 0;
+  // Empezamos con todos rectos hacia +Z
+  for(let i=0;i<SEG_COUNT;i++){
+    segments.push({
+      cx: genX, cz: genZ, yaw: genYaw,
+      // offsets laterales para árboles/postes
+      treeSlots: [null, null], postSlots: [null, null],
+      hasCenterLine: (i%2===0)
+    });
+    genX += Math.sin(genYaw) * SEG_LEN;
+    genZ += Math.cos(genYaw) * SEG_LEN;
+  }
+  headIdx = SEG_COUNT - 1;
+  tailIdx = 0;
+  generatedCount = SEG_COUNT;
+  updateRoadMesh();
+}
+
+// Añade un segmento nuevo delante y recicla el de atrás
+function pushSegment(){
+  // Avanzamos el cursor de cabeza
+  headIdx = (headIdx + 1) % SEG_COUNT;
+  // Generamos uno nuevo con la curvatura actual
+  genYaw += roadBend * SEG_LEN;
+  genX += Math.sin(genYaw) * SEG_LEN;
+  genZ += Math.cos(genYaw) * SEG_LEN;
+  segments[headIdx] = {
+    cx: genX, cz: genZ, yaw: genYaw,
+    treeSlots: [null, null], postSlots: [null, null],
+    hasCenterLine: (generatedCount % 2 === 0)
+  };
+  generatedCount++;
+  // Reciclamos el de cola
+  tailIdx = (tailIdx + 1) % SEG_COUNT;
+}
+
+// Devuelve el segmento i-ésimo contando desde la cola (0 = más viejo)
+function segAt(i){
+  return segments[(tailIdx + i) % SEG_COUNT];
+}
+function headSeg(){
+  return segments[headIdx];
+}
+
+// Actualiza el buffer de la carretera a partir de segments
+function updateRoadMesh(){
+  const hw = halfWidth;
+  let vi = 0;
+  for(let i=0;i<SEG_COUNT;i++){
+    const s = segAt(i);
+    // Vector perpendicular
+    const px = Math.cos(s.yaw);
+    const pz = -Math.sin(s.yaw);
+    // Lado izquierdo y derecho
+    roadPos[vi*3+0] = s.cx - px*hw;
+    roadPos[vi*3+1] = 0.0;
+    roadPos[vi*3+2] = s.cz - pz*hw;
+    roadUV[vi*2+0] = 0;
+    roadUV[vi*2+1] = i*0.35;
+    vi++;
+    roadPos[vi*3+0] = s.cx + px*hw;
+    roadPos[vi*3+1] = 0.0;
+    roadPos[vi*3+2] = s.cz + pz*hw;
+    roadUV[vi*2+0] = 1;
+    roadUV[vi*2+1] = i*0.35;
+    vi++;
+  }
+  roadPosAttr.needsUpdate = true;
+  roadUVAttr.needsUpdate = true;
+
+  // Líneas laterales
+  updateSideStrip(lineL, -hw + 0.35, 0.15);
+  updateSideStrip(lineR,  hw - 0.35, 0.15);
+  updateCenterLine();
+}
+
+function updateSideStrip(mesh, centerOffset, halfLineWidth){
+  const arr = mesh.geometry.attributes.position.array;
+  let vi = 0;
+  for(let i=0;i<SEG_COUNT;i++){
+    const s = segAt(i);
+    const px = Math.cos(s.yaw);
+    const pz = -Math.sin(s.yaw);
+    // Línea izquierda y derecha del offset
+    arr[vi*3+0] = s.cx + px*(centerOffset - halfLineWidth);
+    arr[vi*3+1] = mesh.userData.y;
+    arr[vi*3+2] = s.cz + pz*(centerOffset - halfLineWidth);
+    vi++;
+    arr[vi*3+0] = s.cx + px*(centerOffset + halfLineWidth);
+    arr[vi*3+1] = mesh.userData.y;
+    arr[vi*3+2] = s.cz + pz*(centerOffset + halfLineWidth);
+    vi++;
+  }
+  mesh.geometry.attributes.position.needsUpdate = true;
+}
+
+function updateCenterLine(){
+  const arr = lineC.geometry.attributes.position.array;
+  let vi = 0;
+  const dashLen = SEG_LEN;  // cada 2 segmentos, un trazo
+  const halfDash = dashLen * 0.5;
+  // Recorremos los segmentos y para cada par generamos un quad central
+  // Solo pares (i%2===0)
+  for(let i=0;i<SEG_COUNT-1;i+=2){
+    const s0 = segAt(i);
+    const s1 = segAt(i+1);
+    // Punto medio en dirección
+    const midx = (s0.cx + s1.cx)*0.5;
+    const midz = (s0.cz + s1.cz)*0.5;
+    const yaw  = s0.yaw;
+    const px = Math.cos(yaw);
+    const pz = -Math.sin(yaw);
+    const dx = Math.sin(yaw);
+    const dz = Math.cos(yaw);
+    // Centro del trazo
+    const cx = midx;
+    const cz = midz;
+    // Cuatro esquinas del quad: ancho 0.12 m
+    const a = 0.12;
+    // Esquina 1 (atrás-izq), 2 (atrás-dcha), 3 (alante-izq), 4 (alante-dcha)
+    const bx = cx - dx*halfDash;
+    const bz = cz - dz*halfDash;
+    const fx = cx + dx*halfDash;
+    const fz = cz + dz*halfDash;
+    const verts = [
+      bx - px*a, 0.04, bz - pz*a,
+      bx + px*a, 0.04, bz + pz*a,
+      fx - px*a, 0.04, fz - pz*a,
+      fx + px*a, 0.04, fz + pz*a
+    ];
+    for(let k=0;k<12;k++) arr[vi*3+k] = verts[k];
+    vi += 4;
+  }
+  // Rellenamos el resto a 0
+  for(let i=vi*3;i<arr.length;i++) arr[i] = 0;
+  lineC.geometry.attributes.position.needsUpdate = true;
+}
+
+/* ============================================================
+   ÁRBOLES Y POSTES LIGADOS A SEGMENTOS
+   ============================================================ */
+let nextTreeSlot = 0;
+let nextPostSlot = 0;
+
+function updateEnvironment(){
+  // Recolocamos árboles y postes en función de los segmentos vivos
+  // Estrategia: cada 8 segmentos colocamos un árbol a cada lado,
+  // cada 12 segmentos un poste de luz a un lado alterno.
+  // Reasignamos posiciones del pool a segmentos concretos.
+  let treeIdx = 0;
+  let postIdx = 0;
+  for(let i=4; i<SEG_COUNT-4; i+=8){
+    const s = segAt(i);
+    const px = Math.cos(s.yaw);
+    const pz = -Math.sin(s.yaw);
+    const hw = halfWidth;
+    // Árbol izquierdo
+    if(treeIdx < treePool.length){
+      const t = treePool[treeIdx++];
+      const off = hw + 2.5 + ((i*13)%7)*0.4;
+      t.position.set(s.cx - px*off, 0, s.cz - pz*off);
+      t.rotation.y = ((i*37)%360)*Math.PI/180;
+      const sc = 0.7 + ((i*11)%5)*0.15;
+      t.scale.setScalar(sc);
+      t.visible = true;
+    }
+    // Árbol derecho
+    if(treeIdx < treePool.length){
+      const t = treePool[treeIdx++];
+      const off = hw + 2.5 + ((i*17)%9)*0.35;
+      t.position.set(s.cx + px*off, 0, s.cz + pz*off);
+      t.rotation.y = ((i*53)%360)*Math.PI/180;
+      const sc = 0.7 + ((i*7)%6)*0.13;
+      t.scale.setScalar(sc);
+      t.visible = true;
+    }
+  }
+  for(let i=6; i<SEG_COUNT-6; i+=12){
+    const s = segAt(i);
+    const px = Math.cos(s.yaw);
+    const pz = -Math.sin(s.yaw);
+    const hw = halfWidth;
+    const side = (i%24===6) ? 1 : -1;
+    if(postIdx < postPool.length){
+      const p = postPool[postIdx++];
+      const off = hw + 1.4;
+      p.position.set(s.cx + px*off*side, 0, s.cz + pz*off*side);
+      p.rotation.y = Math.atan2(px, pz) + (side>0 ? 0 : Math.PI);
+      p.visible = true;
+    }
+  }
+  for(let i=treeIdx;i<treePool.length;i++) treePool[i].visible = false;
+  for(let i=postIdx;i<postPool.length;i++) postPool[i].visible = false;
+}
+
+/* ============================================================
+   CONDUCCIÓN
    ============================================================ */
 const drive = {
-  t: 0,               // posición 0..1 sobre la spline (da vueltas)
-  lateral: 0,         // -MAX_LATERAL..MAX_LATERAL
-  speed: 80/3.6,      // m/s
+  speed: 80/3.6,
   targetSpeed: 80/3.6,
-  steer: 0,           // -1..1 (input)
-  steerSmooth: 0,     // suavizado para la cámara/ruedas
+  steer: 0,
+  steerSmooth: 0,
   braking: false,
-  heading: 0,
-  curvature: 0,       // -100..100
+  heading: 0,           // grados, para HUD
+  curvature: 0,         // -100..100
   pitch: 0,
-  roll: 0
+  roll: 0,
+  bend: 0,              // curvatura actual de la carretera aplicada a segmentos
+  totalDistance: 0,
+  laneChange: 0,        // animación de ancho de vía
 };
 
 let demoOn = false;
 let demoTimer = 0;
+let autoCurves = false;
+let autoTimer = 0;
 
+// GPS
+let gpsWatchId = null;
+let gpsEnabled = false;
+let gpsActive = false;
+const gpsSimBase = { lat: 40.4168, lon: -3.7038 };
+let gpsSimLat = gpsSimBase.lat;
+let gpsSimLon = gpsSimBase.lon;
+
+function angularDiff(a, b){
+  return wrapPi(a-b);
+}
+
+/* ============================================================
+   ACTUALIZACIÓN DEL MOTOR
+   ============================================================ */
 function updateDrive(dt){
-  // ---- Sliders / botones ----
+  // --- DEMO ---
   if(demoOn){
     demoTimer += dt;
-    // Velocidad oscila 60-130 km/h
     drive.targetSpeed = (95 + 35*Math.sin(demoTimer*0.5)) / 3.6;
-    // Volante sigue una onda
-    drive.steer = 0.6*Math.sin(demoTimer*0.75) + 0.25*Math.sin(demoTimer*1.7);
-    drive.steer = clamp(drive.steer, -1, 1);
+    drive.steer = clamp(0.6*Math.sin(demoTimer*0.7) + 0.25*Math.sin(demoTimer*1.6), -1, 1);
     $('steerS').value = Math.round(drive.steer*100);
     $('spdS').value   = Math.round(drive.targetSpeed*3.6);
     updateLabels();
   }
 
-  // ---- Aceleración / freno ----
+  // --- AUTO CURVAS ---
+  if(autoCurves && !demoOn){
+    autoTimer += dt;
+    const auto = 0.55*Math.sin(autoTimer*0.35) + 0.25*Math.sin(autoTimer*0.9);
+    drive.steer = clamp(auto, -0.85, 0.85);
+    $('steerS').value = Math.round(drive.steer*100);
+    updateLabels();
+  }
+
+  // --- Velocidad ---
   const accel = drive.braking ? -14 : 3.5;
   drive.speed += (drive.targetSpeed - drive.speed) * (drive.braking ? 4*dt : 1.6*dt);
   drive.speed = Math.max(0, drive.speed);
 
-  // ---- Avance sobre la spline ----
+  // --- Volante suavizado ---
+  drive.steerSmooth = lerp(drive.steerSmooth, drive.steer, 1-Math.exp(-8*dt));
+
+  // --- Curvatura de la carretera ---
+  // roadBendTarget viene del volante, roadBend se acerca poco a poco
+  // y se endereza solo
+  roadBendTarget = drive.steerSmooth * 0.020;   // rad/m máx ~0.02 (radio ~50m)
+  roadBend = lerp(roadBend, roadBendTarget, 1-Math.exp(-3*dt));
+
+  // Curvatura normalizada para el HUD
+  drive.curvature = clamp(roadBend * 3000, -100, 100);
+
+  // --- Avance ---
   const ds = drive.speed * dt;
-  drive.t = (drive.t + ds / roadLength) % 1;
-  if(drive.t < 0) drive.t += 1;
+  drive.totalDistance += ds;
+  totalDistance = drive.totalDistance;
 
-  // ---- Curvatura REAL de la spline en este punto ----
-  const t0 = drive.t;
-  const tA = (t0 + 0.003) % 1;
-  const tB = (t0 - 0.003 + 1) % 1;
-  const pA = roadCurve.getPointAt(tA);
-  const pB = roadCurve.getPointAt(tB);
-  const pC = roadCurve.getPointAt(t0);
-  const v1 = new THREE.Vector3().subVectors(pC, pB);
-  const v2 = new THREE.Vector3().subVectors(pA, pC);
-  const crossY = v1.x*v2.z - v1.z*v2.x;
-  const dotXY  = v1.x*v2.x + v1.z*v2.z;
-  let angle = Math.atan2(crossY, dotXY);      // radianes por paso
-  // Normalizar a -100..100
-  drive.curvature = clamp(angle * 900, -100, 100);
+  // ¿Cuántos segmentos tenemos que avanzar? El coche está fijo
+  // en el centro (segmento SEG_AHEAD-1). El mundo se mueve bajo él
+  // restando ds del genZ local (o mejor: generando segmentos delante
+  // y reciclando por detrás).
+  // Truco: convertimos ds a "número de segmentos" y empujamos tantos.
+  // Para velocidades bajas, acumulamos.
+  let toPush = Math.floor(ds / SEG_LEN);
+  // Acumulamos el residuo en un acumulador local
+  drive.segAccum = (drive.segAccum || 0) + ds;
+  toPush = Math.floor(drive.segAccum / SEG_LEN);
+  drive.segAccum -= toPush * SEG_LEN;
 
-  // ---- Offset lateral controlado por el volante ----
-  // El volante empuja el coche hacia un lado, pero la curvatura tira de él hacia el exterior
-  const steerEffect = drive.steer * 1.4;
-  const curveEffect = -drive.curvature / 100 * 0.35;
-  drive.lateral += (steerEffect + curveEffect) * dt * 3.0;
-  drive.lateral *= 0.96; // vuelve al centro poco a poco
-  drive.lateral = clamp(drive.lateral, -MAX_LATERAL, MAX_LATERAL);
+  for(let i=0;i<toPush;i++) pushSegment();
 
-  // ---- Posición sobre la pista ----
-  const p = roadCurve.getPointAt(drive.t);
-  const tan = roadCurve.getTangentAt(drive.t).normalize();
-  const up = new THREE.Vector3(0,1,0);
-  const nor = new THREE.Vector3().crossVectors(up, tan).normalize();
+  // --- Heading visual del coche ---
+  // El coche siempre mira hacia +Z local. Su heading = 0 (fijo).
+  // Lo único que cambia es el "yaw visual" del modelo por el volante
+  // para que se vea que gira.
+  const steerHeading = -drive.steerSmooth * 0.35;
+  drive.heading = (steerHeading * 180/Math.PI + 360) % 360;
 
-  carGroup.position.set(
-    p.x + nor.x * drive.lateral,
-    0,
-    p.z + nor.z * drive.lateral
-  );
-
-  // ---- Heading: tangente + un poco de la dirección ----
-  const baseHeading = Math.atan2(tan.x, tan.z);
-  const steerHeading = -drive.steerSmooth * 0.30;   // -17° visuales
-  drive.heading = baseHeading + steerHeading;
-  carGroup.rotation.y = drive.heading;
-
-  // ---- Pitch/Roll sutiles para dar vida ----
-  drive.pitch = -drive.speed * 0.0035;             // morro abajo al acelerar
+  // --- Pitch / Roll del cuerpo ---
+  drive.pitch = -drive.speed * 0.0035;
   drive.roll  = clamp(drive.curvature * 0.006, -0.15, 0.15)
-              + drive.steerSmooth * 0.08;
+              + drive.steerSmooth * 0.10;
   carBody.rotation.z = lerp(carBody.rotation.z, drive.roll, 1-Math.exp(-6*dt));
   carBody.rotation.x = lerp(carBody.rotation.x, drive.pitch, 1-Math.exp(-6*dt));
+  // Giro fino del morro (la dirección)
+  carBody.rotation.y = steerHeading * 0.9;
 
-  // ---- Ruedas: girar delanteras ----
-  drive.steerSmooth = lerp(drive.steerSmooth, drive.steer, 1-Math.exp(-8*dt));
-  const wheelAngle = drive.steerSmooth * 0.55;      // ~31° máx
-  if(wheels.fl){ wheels.fl.rotation.y = (wheels.fl.userData.baseRotY||0) + wheelAngle; }
-  if(wheels.fr){ wheels.fr.rotation.y = (wheels.fr.userData.baseRotY||0) + wheelAngle; }
+  // --- Ruedas delanteras ---
+  const wheelAngle = drive.steerSmooth * 0.55;
+  if(wheels.fl) wheels.fl.rotation.y = (wheels.fl.userData.baseRotY||0) + wheelAngle;
+  if(wheels.fr) wheels.fr.rotation.y = (wheels.fr.userData.baseRotY||0) + wheelAngle;
 
-  // ---- Curvatura exponencial para la cámara ----
-  camRollTarget = -drive.curvature * 0.0025
-                + drive.steerSmooth * 0.05;
-  camRollTarget = clamp(camRollTarget, -0.12, 0.12);
+  // --- Actualizar malla de carretera y entorno ---
+  updateRoadMesh();
+  updateEnvironment();
 
-  // ---- Estado global ----
-  window.TESLA_STATE.speed      = drive.speed * 3.6;
-  window.TESLA_STATE.speedMs    = drive.speed;
-  window.TESLA_STATE.curvature  = drive.curvature;
-  window.TESLA_STATE.heading    = (drive.heading * 180/Math.PI + 360) % 360;
-  window.TESLA_STATE.steering   = drive.steerSmooth;
-  window.TESLA_STATE.braking    = drive.braking;
-  window.TESLA_STATE.raining    = raining;
-  window.TESLA_STATE.dayNight   = dayNightT;
-  window.TESLA_STATE.timestamp  = performance.now();
-  // Lat/lon simulados: hacemos que la posición sobre la curva se traduzca en coords
-  window.TESLA_STATE.lat = 40.4168 + Math.sin(drive.t*Math.PI*2) * 0.01;
-  window.TESLA_STATE.lon = -3.7038 + Math.cos(drive.t*Math.PI*2) * 0.01;
+  // --- Transición de carriles ---
+  // Si la velocidad supera 95 km/h sostenida 2 s -> 3 carriles
+  // Si baja de 60 km/h sostenida 5 s -> 2 carriles
+  updateLaneDecision(dt);
 
-  // Autoboard: postMessage (silencioso si no hay parent)
+  // --- Estado global ---
+  window.TESLA_STATE.speed     = drive.speed * 3.6;
+  window.TESLA_STATE.speedMs   = drive.speed;
+  window.TESLA_STATE.curvature = drive.curvature;
+  window.TESLA_STATE.heading   = drive.heading;
+  window.TESLA_STATE.steering  = drive.steerSmooth;
+  window.TESLA_STATE.braking   = drive.braking;
+  window.TESLA_STATE.raining   = raining;
+  window.TESLA_STATE.dayNight  = dayNightT;
+  window.TESLA_STATE.lanes     = currentLanes;
+  window.TESLA_STATE.distance  = drive.totalDistance;
+  window.TESLA_STATE.timestamp = performance.now();
+
+  // GPS simulado: la posición avanza coherente con el coche
+  if(!gpsActive){
+    const latDelta = (drive.totalDistance / 111320) * Math.cos(drive.heading*Math.PI/180);
+    const lonDelta = (drive.totalDistance / (111320*Math.cos(gpsSimBase.lat*Math.PI/180))) * Math.sin(drive.heading*Math.PI/180);
+    gpsSimLat = gpsSimBase.lat + latDelta * 0.001;
+    gpsSimLon = gpsSimBase.lon + lonDelta * 0.001;
+    window.TESLA_STATE.lat = gpsSimLat;
+    window.TESLA_STATE.lon = gpsSimLon;
+    window.TESLA_STATE.alt = null;
+    window.TESLA_STATE.accuracy = null;
+  }
+  window.TESLA_STATE.gps.enabled = gpsEnabled;
+  window.TESLA_STATE.gps.simulated = !gpsActive;
+  window.TESLA_STATE.gps.active = gpsActive;
+
+  // Autoboard
   if(window.parent !== window){
     try{ window.parent.postMessage({type:'TESLA_STATE', payload: window.TESLA_STATE}, '*'); }catch(e){}
   }
 }
 
 /* ============================================================
-   9. CÁMARA (perseguidor / conductor)
+   DECISIÓN DE CARRILES
+   ============================================================ */
+let fastTime = 0;
+let slowTime = 0;
+let laneTransition = 0;   // 0..1
+
+function updateLaneDecision(dt){
+  const kmh = drive.speed * 3.6;
+  if(kmh > 95) fastTime += dt; else fastTime = Math.max(0, fastTime - dt*0.5);
+  if(kmh < 60) slowTime += dt; else slowTime = Math.max(0, slowTime - dt*0.5);
+
+  if(currentLanes === 2 && fastTime > 2.0){
+    targetLanes = 3;
+  }
+  if(currentLanes === 3 && slowTime > 5.0){
+    targetLanes = 2;
+  }
+  // Transición suave
+  if(currentLanes !== targetLanes){
+    laneTransition = clamp(laneTransition + dt*0.4, 0, 1);
+    const from = (targetLanes===3) ? 2 : 3;
+    const to   = (targetLanes===3) ? 3 : 2;
+    halfWidth = ((from + (to-from)*laneTransition) * LANE_WIDTH) / 2;
+    if(laneTransition >= 1){
+      currentLanes = targetLanes;
+      laneTransition = 0;
+      fastTime = 0; slowTime = 0;
+    }
+  }
+
+  // Chip
+  const chip = $('chipLanes');
+  chip.textContent = '🛣️ ' + currentLanes + ' carriles' + (laneTransition>0?' → ':'');
+}
+
+/* ============================================================
+   CÁMARA
    ============================================================ */
 let camRoll = 0, camRollTarget = 0;
-const camPosSmooth = new THREE.Vector3(0, 6, -12);
 let viewMode = 'chase';
+const camPosSmooth = new THREE.Vector3(0, 6, -12);
 
 function updateCamera(dt){
   if(viewMode === 'chase'){
     const speedFactor = clamp(drive.speed / 40, 0, 1);
     const dist  = lerp(9.5, 12.5, speedFactor);
     const height= lerp(4.2, 4.8, speedFactor);
-
-    // Punto detrás del coche
-    const back = new THREE.Vector3(
-      -Math.sin(drive.heading),
-      0,
-      -Math.cos(drive.heading)
-    );
-    const target = new THREE.Vector3()
-      .copy(carGroup.position)
-      .addScaledVector(back, dist)
-      .setY(height);
-
+    // El coche siempre mira hacia +Z (heading 0), así que la cámara va detrás (-Z)
+    const target = new THREE.Vector3(0, height, -dist);
     camPosSmooth.lerp(target, 1-Math.exp(-6*dt));
     camera.position.copy(camPosSmooth);
-
-    // Mira un poco delante del coche
-    const lookAt = new THREE.Vector3()
-      .copy(carGroup.position)
-      .addScaledVector(back, -6)
-      .setY(1.0);
-    camera.lookAt(lookAt);
-
-    // Roll suave por curvatura
+    camera.lookAt(0, 1.0, 6);
     camRoll = lerp(camRoll, camRollTarget, 1-Math.exp(-4*dt));
     camera.rotateZ(camRoll);
   } else {
-    // Vista conductor: dentro, mirando al frente
-    const fwd = new THREE.Vector3(
-      Math.sin(drive.heading),
-      0,
-      Math.cos(drive.heading)
-    );
-    const target = new THREE.Vector3()
-      .copy(carGroup.position)
-      .addScaledVector(fwd, 0.2)
-      .setY(1.55);
+    // Vista conductor
+    const target = new THREE.Vector3(0, 1.55, -0.2);
     camPosSmooth.lerp(target, 1-Math.exp(-10*dt));
     camera.position.copy(camPosSmooth);
-    const lookAt = new THREE.Vector3()
-      .copy(carGroup.position)
-      .addScaledVector(fwd, 12)
-      .setY(1.35);
-    camera.lookAt(lookAt);
+    camera.lookAt(0, 1.35, 12);
     camera.rotateZ(camRollTarget * 0.4);
   }
+  camRollTarget = clamp(-drive.curvature * 0.0025 + drive.steerSmooth * 0.06, -0.12, 0.12);
 }
 
 /* ============================================================
-   10. LLUVIA
+   LLUVIA
    ============================================================ */
 const rainCanvas = $('rain');
 const rctx = rainCanvas.getContext('2d');
@@ -735,8 +1071,19 @@ function drawRain(dt){
   rctx.globalAlpha = 1;
 }
 
+// Aplicar efectos de lluvia al material de la carretera
+function applyWeatherToRoad(){
+  if(raining){
+    roadMat.roughness = 0.35;   // refleja
+    roadMat.metalness = 0.15;
+  } else {
+    roadMat.roughness = 0.92;
+    roadMat.metalness = 0.05;
+  }
+}
+
 /* ============================================================
-   11. HUD
+   HUD
    ============================================================ */
 const arcProg = $('arcProg');
 const arcTrack = $('arcTrack');
@@ -747,7 +1094,6 @@ arcProg.style.strokeDashoffset = arcLen;
 function setArcProgress(v01){
   const off = arcLen * (1 - clamp(v01,0,1));
   arcProg.style.strokeDashoffset = off;
-  // Color del arco
   let c;
   if(v01 < 0.5) c = '#39d98a';
   else if(v01 < 0.8) c = '#f5b942';
@@ -771,16 +1117,16 @@ function setCurvBar(curv){
 function updateHUD(){
   const spd = window.TESLA_STATE.speed;
   $('spdNum').textContent = Math.round(spd);
-  setArcProgress(spd / 200);
+  setArcProgress(spd / 220);
 
   setCurvBar(window.TESLA_STATE.curvature);
   $('infoCurv').textContent = Math.round(window.TESLA_STATE.curvature);
   $('infoHdg').textContent  = Math.round(window.TESLA_STATE.heading) + '°';
+  $('infoDist').textContent = Math.round(window.TESLA_STATE.distance);
   $('infoView').textContent = viewMode === 'chase' ? 'Perseguidor' : 'Conductor';
 
   const chipBrake = $('chipBrake');
   chipBrake.classList.toggle('on', drive.braking);
-  chipBrake.classList.toggle('warn', false);
 
   const chipRain = $('chipRain');
   chipRain.textContent = raining ? '🌧️ LLUVIA' : '🌧️ SECO';
@@ -789,14 +1135,21 @@ function updateHUD(){
   const chipDay = $('chipDay');
   chipDay.textContent = dayNightT > 0.5 ? '☀️ DÍA' : '🌙 NOCHE';
   chipDay.classList.toggle('on', dayNightT > 0.5);
+
+  const chipGps = $('chipGps');
+  if(gpsActive) chipGps.textContent = '🛰️ GPS OK';
+  else if(gpsEnabled) chipGps.textContent = '🛰️ GPS…';
+  else chipGps.textContent = '🛰️ GPS OFF';
+  chipGps.classList.toggle('on', gpsActive);
+  chipGps.classList.toggle('warn', gpsEnabled && !gpsActive);
 }
 
 /* ============================================================
-   12. CONTROLES
+   CONTROLES
    ============================================================ */
-const spdS   = $('spdS');
+const spdS = $('spdS');
 const steerS = $('steerS');
-const spdV   = $('spdV');
+const spdV = $('spdV');
 const steerV = $('steerV');
 
 function updateLabels(){
@@ -808,64 +1161,110 @@ function updateLabels(){
 }
 
 spdS.addEventListener('input', ()=>{
-  demoOn = false; $('bDemo').classList.remove('on');
+  demoOn = false; autoCurves = false;
+  $('bDemo').classList.remove('on');
+  $('bAuto').classList.remove('on');
   drive.targetSpeed = parseFloat(spdS.value)/3.6;
   updateLabels();
 });
 steerS.addEventListener('input', ()=>{
-  demoOn = false; $('bDemo').classList.remove('on');
+  demoOn = false; autoCurves = false;
+  $('bDemo').classList.remove('on');
+  $('bAuto').classList.remove('on');
   drive.steer = parseFloat(steerS.value)/100;
   updateLabels();
 });
 
-$('bL').onclick = ()=>{ demoOn=false; $('bDemo').classList.remove('on'); steerS.value=-70; drive.steer=-0.7; updateLabels(); };
-$('bS').onclick = ()=>{ demoOn=false; $('bDemo').classList.remove('on'); steerS.value=0;   drive.steer=0;    updateLabels(); };
-$('bR').onclick = ()=>{ demoOn=false; $('bDemo').classList.remove('on'); steerS.value=70;  drive.steer=0.7;  updateLabels(); };
+$('bL').onclick = ()=>{ demoOn=false; autoCurves=false; $('bDemo').classList.remove('on'); $('bAuto').classList.remove('on'); steerS.value=-70; drive.steer=-0.7; updateLabels(); };
+$('bS').onclick = ()=>{ demoOn=false; autoCurves=false; $('bDemo').classList.remove('on'); $('bAuto').classList.remove('on'); steerS.value=0;   drive.steer=0;    updateLabels(); };
+$('bR').onclick = ()=>{ demoOn=false; autoCurves=false; $('bDemo').classList.remove('on'); $('bAuto').classList.remove('on'); steerS.value=70;  drive.steer=0.7;  updateLabels(); };
 
 $('bBrake').onclick = ()=>{ drive.braking = !drive.braking; $('bBrake').classList.toggle('on', drive.braking); };
-$('bRain').onclick  = ()=>{ raining = !raining; $('bRain').classList.toggle('on', raining); };
+$('bRain').onclick  = ()=>{ raining = !raining; $('bRain').classList.toggle('on', raining); applyWeatherToRoad(); };
 $('bDay').onclick   = ()=>{ isDay=true;  $('bDay').classList.add('on');  $('bNight').classList.remove('on'); };
 $('bNight').onclick = ()=>{ isDay=false; $('bNight').classList.add('on'); $('bDay').classList.remove('on'); };
-
-$('bCam').onclick = ()=>{ viewMode = viewMode==='chase'?'cockpit':'chase'; window.TESLA_STATE.view = viewMode; };
+$('bCam').onclick   = ()=>{ viewMode = viewMode==='chase'?'cockpit':'chase'; window.TESLA_STATE.view = viewMode; };
 
 $('bDemo').onclick = ()=>{
   demoOn = !demoOn;
+  if(demoOn) autoCurves = false;
   $('bDemo').classList.toggle('on', demoOn);
+  $('bAuto').classList.toggle('on', autoCurves);
   if(demoOn) demoTimer = 0;
+};
+
+$('bAuto').onclick = ()=>{
+  autoCurves = !autoCurves;
+  if(autoCurves) demoOn = false;
+  $('bAuto').classList.toggle('on', autoCurves);
+  $('bDemo').classList.toggle('on', demoOn);
+  if(autoCurves) autoTimer = 0;
+};
+
+$('bGps').onclick = ()=>{
+  if(!gpsEnabled){
+    // Activar
+    gpsEnabled = true;
+    $('bGps').classList.add('on');
+    if(!navigator.geolocation){
+      console.warn('Geolocalización no soportada, seguimos simulados');
+      gpsEnabled = false;
+      $('bGps').classList.remove('on');
+      return;
+    }
+    gpsWatchId = navigator.geolocation.watchPosition(
+      (pos)=>{
+        gpsActive = true;
+        window.TESLA_STATE.lat = pos.coords.latitude;
+        window.TESLA_STATE.lon = pos.coords.longitude;
+        window.TESLA_STATE.alt = pos.coords.altitude;
+        window.TESLA_STATE.accuracy = pos.coords.accuracy;
+      },
+      (err)=>{
+        console.warn('GPS denegado:', err.message);
+        gpsActive = false;
+        gpsEnabled = false;
+        $('bGps').classList.remove('on');
+      },
+      { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 }
+    );
+  } else {
+    // Desactivar
+    gpsEnabled = false; gpsActive = false;
+    $('bGps').classList.remove('on');
+    if(gpsWatchId !== null){
+      navigator.geolocation.clearWatch(gpsWatchId);
+      gpsWatchId = null;
+    }
+  }
 };
 
 $('col').addEventListener('input', ()=>{
   const hex = $('col').value;
   $('colV').textContent = hex;
-  if(bodyMaterial && bodyMaterial.color){
-    bodyMaterial.color.set(hex);
-  }
+  if(bodyMaterial && bodyMaterial.color) bodyMaterial.color.set(hex);
 });
 
-// Teclado
 addEventListener('keydown', (e)=>{
-  if(e.key === 'h' || e.key === 'H'){
-    $('panel').classList.toggle('hidden');
-  }
+  if(e.key === 'h' || e.key === 'H') $('panel').classList.toggle('hidden');
   if(e.key === 'c' || e.key === 'C'){
     viewMode = viewMode==='chase'?'cockpit':'chase';
     window.TESLA_STATE.view = viewMode;
   }
   if(e.key === 'ArrowLeft' || e.key==='a' || e.key==='A'){
-    demoOn=false; $('bDemo').classList.remove('on');
+    demoOn=false; autoCurves=false; $('bDemo').classList.remove('on'); $('bAuto').classList.remove('on');
     steerS.value = Math.max(-100, parseFloat(steerS.value)-8);
     drive.steer = parseFloat(steerS.value)/100;
     updateLabels();
   }
   if(e.key === 'ArrowRight' || e.key==='d' || e.key==='D'){
-    demoOn=false; $('bDemo').classList.remove('on');
+    demoOn=false; autoCurves=false; $('bDemo').classList.remove('on'); $('bAuto').classList.remove('on');
     steerS.value = Math.min(100, parseFloat(steerS.value)+8);
     drive.steer = parseFloat(steerS.value)/100;
     updateLabels();
   }
   if(e.key === 'ArrowUp' || e.key==='w' || e.key==='W'){
-    spdS.value = Math.min(200, parseFloat(spdS.value)+5);
+    spdS.value = Math.min(220, parseFloat(spdS.value)+5);
     drive.targetSpeed = parseFloat(spdS.value)/3.6;
     updateLabels();
   }
@@ -878,7 +1277,7 @@ addEventListener('keydown', (e)=>{
 });
 
 /* ============================================================
-   13. RESIZE
+   RESIZE
    ============================================================ */
 function resize(){
   const w = innerWidth, h = innerHeight;
@@ -890,7 +1289,7 @@ function resize(){
 addEventListener('resize', resize);
 
 /* ============================================================
-   14. LOOP
+   LOOP
    ============================================================ */
 let last = performance.now();
 let fpsAcc = 0, fpsN = 0, fpsT = 0;
@@ -901,7 +1300,6 @@ function tick(){
   const dt = Math.min(0.05, (now - last)/1000);
   last = now;
 
-  // Suavizado día/noche
   const target = isDay ? 1 : 0;
   if(dayNightT !== target){
     dayNightT = lerp(dayNightT, target, 1-Math.exp(-2*dt));
@@ -914,7 +1312,6 @@ function tick(){
   drawRain(dt);
   updateHUD();
 
-  // FPS
   fpsAcc += dt; fpsN++; fpsT += dt;
   if(fpsT > 0.5){
     $('infoFps').textContent = Math.round(fpsN/fpsAcc);
@@ -925,21 +1322,24 @@ function tick(){
 }
 
 /* ============================================================
-   15. INIT
+   INIT
    ============================================================ */
+initRoad();
 applyDayNight();
+applyWeatherToRoad();
 updateLabels();
 resize();
 tick();
 
-// Exponer por si Autoboard quiere leer en cualquier momento
+// API pública
 window.TeslaNav = {
   getState(){ return window.TESLA_STATE; },
   setSpeed(kmh){ spdS.value = kmh; drive.targetSpeed = kmh/3.6; updateLabels(); },
   setSteer(v){ steerS.value = clamp(v,-1,1)*100; drive.steer = clamp(v,-1,1); updateLabels(); },
-  setRain(b){ raining = !!b; $('bRain').classList.toggle('on', raining); },
+  setRain(b){ raining = !!b; $('bRain').classList.toggle('on', raining); applyWeatherToRoad(); },
   setDay(b){ isDay = !!b; $('bDay').classList.toggle('on', isDay); $('bNight').classList.toggle('on', !isDay); },
-  setView(v){ viewMode = v==='cockpit'?'cockpit':'chase'; window.TESLA_STATE.view = viewMode; }
+  setView(v){ viewMode = v==='cockpit'?'cockpit':'chase'; window.TESLA_STATE.view = viewMode; },
+  setLanes(n){ targetLanes = clamp(n, 2, 3); }
 };
 
 })();
